@@ -1,0 +1,127 @@
+{
+    "loading": "Loading...",
+    "dashboard": {
+      "title": "AI-Powered Waste Management Dashboard",
+      "totalWaste": "Total Waste Collected",
+      "recyclingRate": "Recycling Rate",
+      "uniqueLocations": "Unique Collection Points"
+    },
+    "tabs": {
+      "collection": "Waste Collection",
+      "analytics": "Analytics",
+      "gamification": "Gamification",
+      "incidents": "Incidents"
+    },
+    "collection": {
+      "title": "Record Waste Collection",
+      "weight": "Weight (kg)",
+      "ownerName": "Owner Name",
+      "location": "Location",
+      "trashType": "Waste Type",
+      "selectType": "Select Type",
+      "submit": "Submit Collection Data",
+      "recentTitle": "Recent Collections",
+      "searchPlaceholder": "Search by owner, location, or waste type",
+      "tableWeight": "Weight (kg)",
+      "tableOwner": "Owner Name",
+      "tableLocation": "Location",
+      "tableType": "Waste Type",
+      "tablePoints": "Points Earned",
+      "tableTimestamp": "Timestamp"
+    },
+    "trashTypes": {
+      "plastic": "Plastic",
+      "paper": "Paper",
+      "glass": "Glass",
+      "metal": "Metal",
+      "organic": "Organic",
+      "electronic": "Electronic"
+    },
+    "analytics": {
+      "title": "Waste Collection Analytics",
+      "weight": "Weight",
+      "points": "Points",
+      "composition": "Waste Composition",
+      "aiInsights": "AI Insights",
+      "insight1": "Predicted waste increase of 15% next month based on historical data.",
+      "insight2": "Recommend increasing collection frequency in RT 03 due to consistent high volume.",
+      "insight3": "Plastic recycling rate could be improved by 20% with targeted education programs."
+    },
+    "gamification": {
+      "leaderboard": "Leaderboard",
+      "rank": "Rank",
+      "user": "User",
+      "level": "Level",
+      "points": "Points",
+      "achievements": "Achievements",
+      "achievement1": {
+        "title": "Recycling Rookie",
+        "description": "Recycle your first item"
+      },
+      "achievement2": {
+        "title": "Waste Warrior",
+        "description": "Collect 100kg of waste"
+      },
+      "achievement3": {
+        "title": "Green Guardian",
+        "description": "Maintain a 90% recycling rate for a month"
+      }
+    },
+    "incidents": {
+      "title": "Incident Reports",
+      "type": "Type",
+      "location": "Location",
+      "status": "Status",
+      "reportedAt": "Reported At",
+      "action": "Action",
+      "viewDetails": "View Details",
+      "report": "Report New Incident",
+      "incidentType": "Incident Type",
+      "description": "Description",
+      "submitReport": "Report Incident",
+      "locationPlaceholder": "Enter incident location",
+      "descriptionPlaceholder": "Describe the incident",
+      "types": {
+        "overflowingBin": "Overflowing Bin",
+        "illegalDumping": "Illegal Dumping",
+        "damagedEquipment": "Damaged Equipment",
+        "other": "Other"
+      },
+      "statuses": {
+        "pending": "Pending",
+        "inProgress": "In Progress",
+        "resolved": "Resolved"
+      }
+    },
+    "schedule": {
+      "title": "Collection Schedule",
+      "monday": "Monday",
+      "wednesday": "Wednesday",
+      "friday": "Friday"
+    },
+    "map": {
+      "title": "Collection Map",
+      "viewInteractive": "View Interactive Map",
+      "interactiveTitle": "Interactive Collection Map",
+      "comingSoon": "This feature is coming soon. It will display real-time collection routes and hotspots.",
+      "placeholder": "Map Placeholder"
+    },
+    "error": {
+      "fetchRecords": "Error fetching trash records",
+      "insertRecord": "Error inserting trash record"
+    },
+    "success": {
+      "recordAdded": "Trash record added successfully"
+    },
+    "languageSelector": {
+      "label": "Language",
+      "en": "English",
+      "id": "Bahasa Indonesia"
+    },
+    "footer": {
+      "copyright": "© 2023 WasteMateAI. All rights reserved.",
+      "privacyPolicy": "Privacy Policy",
+      "termsOfService": "Terms of Service"
+    }
+  }
+  

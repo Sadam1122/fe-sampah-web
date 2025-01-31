@@ -1,0 +1,128 @@
+{
+    "loading": "Memuat...",
+    "dashboard": {
+      "title": "Dashboard Pengelolaan Sampah Berbasis AI",
+      "totalWaste": "Total Sampah Terkumpul",
+      "recyclingRate": "Tingkat Daur Ulang",
+      "uniqueLocations": "Titik Pengumpulan Unik"
+    },
+    "tabs": {
+      "collection": "Pengumpulan Sampah",
+      "analytics": "Analitik",
+      "gamification": "Gamifikasi",
+      "incidents": "Insiden"
+    },
+    "collection": {
+      "title": "Catat Pengumpulan Sampah",
+      "weight": "Berat (kg)",
+      "ownerName": "Nama Pemilik",
+      "location": "Lokasi",
+      "trashType": "Jenis Sampah",
+      "selectType": "Pilih Jenis",
+      "submit": "Kirim Data Pengumpulan",
+      "recentTitle": "Pengumpulan Terbaru",
+      "searchPlaceholder": "Cari berdasarkan pemilik, lokasi, atau jenis sampah",
+      "tableWeight": "Berat (kg)",
+      "tableOwner": "Nama Pemilik",
+      "tableLocation": "Lokasi",
+      "tableType": "Jenis Sampah",
+      "tablePoints": "Poin Diperoleh",
+      "tableTimestamp": "Waktu"
+    },
+    "trashTypes": {
+      "plastic": "Plastik",
+      "paper": "Kertas",
+      "glass": "Kaca",
+      "metal": "Logam",
+      "organic": "Organik",
+      "electronic": "Elektronik"
+    },
+    "analytics": {
+      "title": "Analitik Pengumpulan Sampah",
+      "weight": "Berat",
+      "points": "Poin",
+      "composition": "Komposisi Sampah",
+      "aiInsights": "Wawasan AI",
+      "insight1": "Diprediksi peningkatan sampah sebesar 15% bulan depan berdasarkan data historis.",
+      "insight2": "Disarankan untuk meningkatkan frekuensi pengumpulan di RT 03 karena volume yang konsisten tinggi.",
+      "insight3": "Tingkat daur ulang plastik dapat ditingkatkan 20% dengan program edukasi yang terarah."
+    },
+    "gamification": {
+      "leaderboard": "Papan Peringkat",
+      "rank": "Peringkat",
+      "user": "Pengguna",
+      "level": "Level",
+      "points": "Poin",
+      "achievements": "Pencapaian",
+      "achievement1": {
+        "title": "Pemula Daur Ulang",
+        "description": "Daur ulang item pertama Anda"
+      },
+      "achievement2": {
+        "title": "Pejuang Sampah",
+        "description": "Kumpulkan 100kg sampah"
+      },
+      "achievement3": {
+        "title": "Penjaga Lingkungan",
+        "description": "Pertahankan tingkat daur ulang 90% selama sebulan"
+      }
+    },
+    "incidents": {
+      "title": "Laporan Insiden",
+      "type": "Jenis",
+      "location": "Lokasi",
+      "status": "Status",
+      "reportedAt": "Dilaporkan Pada",
+      "action": "Tindakan",
+      "viewDetails": "Lihat Detail",
+      "report": "Laporkan Insiden Baru",
+      "incidentType": "Jenis Insiden",
+      "description": "Deskripsi",
+      "submitReport": "Kirim Laporan",
+      "locationPlaceholder": "Masukkan lokasi insiden",
+      "descriptionPlaceholder": "Jelaskan insiden",
+      "types": {
+        "overflowingBin": "Tempat Sampah Meluap",
+        "illegalDumping": "Pembuangan Ilegal",
+        "damagedEquipment": "Peralatan Rusak",
+        "other": "Lainnya"
+      },
+      "statuses": {
+        "pending": "Menunggu",
+        "inProgress": "Dalam Proses",
+        "resolved": "Selesai"
+      }
+    },
+    "schedule": {
+      "title": "Jadwal Pengumpulan",
+      "monday": "Senin",
+      "wednesday": "Rabu",
+      "friday": "Jumat"
+    },
+    "map": {
+      "title": "Peta Pengumpulan",
+      "viewInteractive": "Lihat Peta Interaktif",
+      "interactiveTitle": "Peta Pengumpulan Interaktif",
+      "comingSoon": "Fitur ini akan segera hadir. Akan menampilkan rute pengumpulan dan titik panas secara real-time.",
+      "placeholder": "Placeholder Peta"
+    },
+    "error": {
+      "fetchRecords": "Gagal mengambil data sampah",
+      "insertRecord": "Gagal menambahkan data sampah"
+    },
+    "success": {
+      "recordAdded": "Data sampah berhasil ditambahkan"
+    },
+    "languageSelector": {
+      "label": "Bahasa",
+      "en": "English",
+      "id": "Bahasa Indonesia"
+    },
+    "footer": {
+      "copyright": "© 2023 WasteMateAI. Hak cipta dilindungi undang-undang.",
+      "privacyPolicy": "Kebijakan Privasi",
+      "termsOfService": "Syarat dan Ketentuan"
+    }
+  }
+  
+  
