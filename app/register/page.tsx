@@ -1,143 +1,333 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import axios from "axios";
-import { FaEnvelope, FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import { useState, useEffect } from "react"
+import { ArrowLeft, Mail, User, Lock, Eye, EyeOff, UserPlus, Leaf } from "lucide-react"
+import Notification from "../component/Notification"
+import { motion } from "framer-motion"
+import type React from "react" // Added import for React
+
+interface UserData {
+  id: string
+  role: string
+  username: string
+}
+
+interface FormData {
+  email: string
+  username: string
+  password: string
+  confirmPassword: string
+  role: string
+  createdById?: string
+}
+
+const ROLE_CONFIGURATIONS: Record<string, string[]> = {
+  superadmin: ["STAFF", "ADMIN"],
+  admin: ["STAFF"],
+  staff: ["STAFF"],
+}
+
+const validatePassword = (password: string): string[] => {
+  const errors: string[] = []
+  if (password.length < 8) errors.push("Password harus memiliki panjang minimal 8 karakter")
+  if (!/[A-Z]/.test(password)) errors.push("Password harus mengandung setidaknya satu huruf kapital")
+  if (!/[a-z]/.test(password)) errors.push("Password harus mengandung setidaknya satu huruf kecil")
+  if (!/[0-9]/.test(password)) errors.push("Password harus mengandung setidaknya satu angka")
+  if (!/[^A-Za-z0-9]/.test(password)) errors.push("Password harus mengandung setidaknya satu karakter khusus")
+  return errors
+}
+
 
 export default function RegisterPage() {
-  const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("STAFF"); // Default role is STAFF
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const [formData, setFormData] = useState<FormData>({
+    email: "",
+    username: "",
+    password: "",
+    confirmPassword: "",
+    role: "",
+  })
+  const [currentUser, setCurrentUser] = useState<UserData | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null)
+  const [availableRoles, setAvailableRoles] = useState<string[]>([])
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([])
 
+  useEffect(() => {
+    const validateUserAccess = () => {
+      try {
+        const userJson = localStorage.getItem("user")
 
-  
-  // Assuming you get the logged-in user's ID dynamically, here we'll use a placeholder
-  const createdById = "currentUserId"; // Replace with logic to get the logged-in user's ID
+        if (!userJson) {
+          window.location.href = "/"
+          return
+        }
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+        const user = JSON.parse(userJson) as UserData
+        const allowedRoles = ROLE_CONFIGURATIONS[user.role.toLowerCase()] || ["STAFF"]
 
-    // Prepare form data to send
-    const formData = {
-      email,
-      username,
-      password,
-      role,
-      createdById, // Add the logged-in user's ID here
-    };
+        setAvailableRoles(allowedRoles)
+        setFormData((prev) => ({ ...prev, role: allowedRoles[0] }))
+        setCurrentUser(user)
+      } catch (err) {
+        window.location.href = "/"
+      }
+    }
+
+    validateUserAccess()
+  }, [])
+
+  useEffect(() => {
+    setPasswordErrors(validatePassword(formData.password))
+  }, [formData.password])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  const clearForm = () => {
+    setFormData((prev) => ({
+      ...prev,
+      email: "",
+      username: "",
+      password: "",
+      confirmPassword: "",
+    }))
+  }
+
+  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setLoading(true)
+    setNotification(null)
 
     try {
-      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, formData, {
-        headers: { "Content-Type": "application/json" },
-      });
-      // Assuming successful registration, navigate to login page
-      router.push("/login");
-    } catch (err: any) {
-      setError("Failed to register. Please try again.");
+      if (!currentUser?.id) {
+        throw new Error("Creator ID not found")
+      }
+
+      if (formData.password !== formData.confirmPassword) {
+        throw new Error("Passwords do not match")
+      }
+
+      if (passwordErrors.length > 0) {
+        throw new Error("Password does not meet requirements")
+      }
+
+      // Validate role permissions
+      if (currentUser.role === "admin" && formData.role === "ADMIN") {
+        throw new Error("Insufficient permissions to create admin accounts")
+      }
+
+      const registrationData = {
+        email: formData.email.trim(),
+        username: formData.username.trim(),
+        password: formData.password,
+        role: formData.role,
+        createdById: currentUser.id, // Explicitly set createdById
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(registrationData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || `Registration failed: ${response.statusText}`)
+      }
+
+      setNotification({ message: "Account created successfully!", type: "success" })
+      clearForm()
+    } catch (err) {
+      setNotification({
+        message: err instanceof Error ? err.message : "Registration failed. Please try again.",
+        type: "error",
+      })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const renderInput = (
+    type: string,
+    icon: React.ReactNode,
+    label: string,
+    name: "email" | "username" | "password" | "confirmPassword",
+    placeholder: string,
+  ) => (
+    <div className="relative">
+      <label htmlFor={name} className="block text-sm font-semibold text-gray-700 mb-2">
+        {label}
+      </label>
+      <div className="flex items-center border rounded-lg overflow-hidden hover:border-green-500 transition-colors">
+        <div className="p-3 bg-green-50">{icon}</div>
+        <input
+          type={
+            type === "password"
+              ? (name === "password" ? showPassword : showConfirmPassword)
+                ? "text"
+                : "password"
+              : type
+          }
+          id={name}
+          name={name}
+          className="w-full px-4 py-2 focus:outline-none bg-white"
+          placeholder={placeholder}
+          value={formData[name]}
+          onChange={handleInputChange}
+          required
+        />
+        {type === "password" && (
+          <button
+            type="button"
+            className="p-3 bg-green-50 text-gray-500 hover:text-gray-700"
+            onClick={() =>
+              name === "password" ? setShowPassword(!showPassword) : setShowConfirmPassword(!showConfirmPassword)
+            }
+          >
+            {(name === "password" ? showPassword : showConfirmPassword) ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+        )}
+      </div>
+    </div>
+  )
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-300 via-teal-400 to-green-500">
-      <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md relative">
-        <h1 className="text-3xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-br from-green-600 to-teal-600">
-          Create Account
-        </h1>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-100 via-green-200 to-green-300 p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md relative"
+      >
+        <button
+          onClick={() => window.history.back()}
+          className="absolute top-4 left-4 p-2 bg-green-100 rounded-full text-green-700 hover:bg-green-200 transition-colors"
+          type="button"
+        >
+          <ArrowLeft size={20} />
+        </button>
+
+        <div className="flex items-center justify-center mb-6">
+          <Leaf className="text-green-500 mr-2" size={24} />
+          <h1 className="text-3xl font-bold text-green-800">Create Account</h1>
+        </div>
+
+        {currentUser && (
+          <div className="mb-6 p-4 bg-green-50 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-green-800">
+              <UserPlus size={16} />
+              <span>Creating as: </span>
+              <span className="font-semibold">{currentUser.username}</span>
+              <span className="px-2 py-1 bg-green-200 rounded-full text-xs">{currentUser.role}</span>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleRegister} className="space-y-6">
-          <div className="relative">
-            <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-            <div className="flex items-center border rounded-lg overflow-hidden">
-              <div className="p-3 bg-gray-100"><FaEnvelope className="text-gray-500" /></div>
-              <input
-                type="email"
-                id="email"
-                className="w-full px-4 py-2 focus:outline-none"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-          </div>
+          {renderInput("email", <Mail size={20} className="text-green-600" />, "Email", "email", "Enter your email")}
+          {renderInput(
+            "text",
+            <User size={20} className="text-green-600" />,
+            "Username",
+            "username",
+            "Choose a username",
+          )}
+          {renderInput(
+            "password",
+            <Lock size={20} className="text-green-600" />,
+            "Password",
+            "password",
+            "Enter your password",
+          )}
+          {renderInput(
+            "password",
+            <Lock size={20} className="text-green-600" />,
+            "Confirm Password",
+            "confirmPassword",
+            "Confirm your password",
+          )}
+
+          {passwordErrors.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="text-sm text-red-500 mt-2"
+            >
+              <ul className="list-disc list-inside">
+                {passwordErrors.map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </motion.div>
+          )}
 
           <div className="relative">
-            <label htmlFor="username" className="block text-sm font-semibold text-gray-700 mb-2">Username</label>
-            <div className="flex items-center border rounded-lg overflow-hidden">
-              <div className="p-3 bg-gray-100"><FaUser className="text-gray-500" /></div>
-              <input
-                type="text"
-                id="username"
-                className="w-full px-4 py-2 focus:outline-none"
-                placeholder="Choose a username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="relative">
-            <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
-            <div className="flex items-center border rounded-lg overflow-hidden">
-              <div className="p-3 bg-gray-100"><FaLock className="text-gray-500" /></div>
-              <input
-                type={showPassword ? "text" : "password"}
-                id="password"
-                className="w-full px-4 py-2 focus:outline-none"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                className="p-3 bg-gray-100 text-gray-500 hover:text-gray-700"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <FaEyeSlash /> : <FaEye />}
-              </button>
-            </div>
-          </div>
-
-          <div className="relative">
-            <label htmlFor="role" className="block text-sm font-semibold text-gray-700 mb-2">Role</label>
-            <div className="flex items-center border rounded-lg overflow-hidden">
-              <div className="p-3 bg-gray-100"><FaUser className="text-gray-500" /></div>
+            <label htmlFor="role" className="block text-sm font-semibold text-gray-700 mb-2">
+              Role
+            </label>
+            <div className="flex items-center border rounded-lg overflow-hidden hover:border-green-500 transition-colors">
+              <div className="p-3 bg-green-50">
+                <User size={20} className="text-green-600" />
+              </div>
               <select
                 id="role"
-                className="w-full px-4 py-2 focus:outline-none"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
+                name="role"
+                className="w-full px-4 py-2 focus:outline-none bg-white"
+                value={formData.role}
+                onChange={handleInputChange}
                 required
               >
-                <option value="STAFF">Staff</option>
-                <option value="ADMIN">Admin</option>
-                <option value="MANAGER">Manager</option>
+                <option value="">Select a role</option>
+                {availableRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+          {notification && (
+            <Notification
+              message={notification.message}
+              type={notification.type}
+              onClose={() => setNotification(null)}
+            />
+          )}
 
-          <button
+          <motion.button
             type="submit"
-            className="w-full py-3 px-6 font-semibold rounded-lg shadow-md bg-gradient-to-br from-green-500 to-teal-500 text-white hover:scale-105"
+            className="w-full py-3 px-6 font-semibold rounded-lg shadow-md bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 transition-all disabled:opacity-70"
             disabled={loading}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            {loading ? "Registering..." : "Register"}
-          </button>
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <motion.span
+                  className="inline-block h-5 w-5 border-2 border-white rounded-full"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                />
+                Processing...
+              </span>
+            ) : (
+              "Create Account"
+            )}
+          </motion.button>
         </form>
-      </div>
+      </motion.div>
     </div>
-  );
+  )
 }
+

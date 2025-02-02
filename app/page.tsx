@@ -1,75 +1,30 @@
-'use client';
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import axios from "axios";
-import { FaEnvelope, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
-
-interface LoginResponse {
-  token: string;
-  user: {
-    id: string;
-    email: string;
-    role: string;
-  };
-}
+import { useState } from "react"
+import { useAuth } from "./hook/useAuth"
+import { useRouter } from "next/navigation"
+import { FaEnvelope, FaLock, FaEye, FaEyeSlash } from "react-icons/fa"
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { login, loading } = useAuth()
+  const router = useRouter()
+
+
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-  
+    e.preventDefault()
+    setError(null)
+
     try {
-      console.log('Attempting login with:', { email }); // Log input
-      
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      console.log('API URL:', apiUrl); // Log URL
-  
-      const response = await axios.post(
-        apiUrl + '/api/auth/login',
-        { email, password },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          withCredentials: true,
-          timeout: 5000, // 5 detik timeout
-        }
-      );
-  
-      console.log('Response received:', response.data);
-  
-      if (response.data?.token) {
-        localStorage.setItem('token', response.data.token);
-        router.push("/dashboard");
-      }
+      await login(email, password)
     } catch (err: any) {
-      console.error('Full error:', err);
-      
-      if (axios.isAxiosError(err)) {
-        if (err.response) {
-          console.error('Response error:', err.response.data);
-          setError(`Error: ${err.response.data.message || err.response.statusText}`);
-        } else if (err.request) {
-          console.error('Request error:', err.request);
-          setError("Server tidak merespon. Coba lagi nanti.");
-        } else {
-          console.error('Setup error:', err.message);
-          setError(err.message);
-        }
-      }
-    } finally {
-      setLoading(false);
+      setError(err.response?.data?.message || "An error occurred during login.")
     }
-  };
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-300 via-teal-400 to-green-500">
@@ -78,7 +33,7 @@ export default function LoginPage() {
         <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-gradient-to-br from-lime-400 to-green-500 rounded-full blur-3xl opacity-50"></div>
 
         <h1 className="text-3xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-br from-green-600 to-teal-600">
-          Welcome Back!
+          Welcome to WasteMate
         </h1>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -143,12 +98,11 @@ export default function LoginPage() {
             className={`w-full py-3 px-6 font-semibold rounded-lg shadow-md transition-all duration-200 text-white text-lg ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-gradient-to-br from-green-500 to-teal-500 hover:scale-105 hover:shadow-lg"}`}
             disabled={loading}
           >
-            <span className="flex items-center justify-center">
-              {loading ? "Logging in..." : "Login"}
-            </span>
+            <span className="flex items-center justify-center">{loading ? "Logging in..." : "Login"}</span>
           </button>
         </form>
       </div>
     </div>
-  );
+  )
 }
+
