@@ -1,44 +1,55 @@
-'use client'
+"use client"
 
-import React, { useState, useEffect } from 'react'
-import { FaTrash, FaRecycle, FaMapMarkerAlt, FaCalendarAlt, FaSearch, FaRobot, FaLeaf, FaChartLine, FaTrophy, FaExclamationTriangle } from 'react-icons/fa'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { FaTrash, FaRecycle, FaMapMarkerAlt, FaCalendarAlt, FaSearch, FaLeaf, FaTrophy } from "react-icons/fa"
+import { motion } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { LineChart, BarChart, DonutChart } from "@/components/ui/charts"
-import { IncidentForm } from './IncidentForm'
-import { RankingList } from './RankingList'
-import { SimplifiedMap } from './SimplifiedMap'
-import WawasanAI  from './WawasanAI';
-import EditModal from "./EditModal";
+import { IncidentForm } from "./IncidentForm"
+import { RankingList } from "./RankingList"
+import { SimplifiedMap } from "./SimplifiedMap"
+import WawasanAI from "./WawasanAI"
+import EditModal from "./EditModal"
+import { useAuth } from "../hook/useAuth"
+import axios from "axios"
+import type React from "react"
 
 // Type definitions
 interface GarbageRecord {
   id: string
+  desaId: string
+  namaPemilik: string
   berat: number
-  nama_pemilik: string
-  rt: string
-  rw: string
-  desa: string
-  jenis_sampah: string
+  jenisSampah: string
   poin: number
   waktu: string
+  rt: string
+  rw: string
 }
 
-interface User {
+interface LeaderboardEntry {
   id: string
-  nama_pemilik: string
-  email: string
-  total_poin: number
-  avatar: string
+  namaPemilik: string
+  totalPoin: number
+  jumlahPengumpulan: number
 }
 
 interface Incident {
@@ -53,151 +64,132 @@ interface Incident {
   time_handled: string | null
 }
 
-const wasteTypes = ['Plastik', 'Kertas', 'Kaca', 'Organik', 'B3']
+interface JadwalPengumpulan {
+  id: string
+  desaId: string
+  hari: string
+  waktuMulai: string
+  waktuSelesai: string
+}
+
+interface Desa {
+  id: string
+  nama: string
+  kecamatan: string
+  kabupaten: string
+  provinsi: string
+}
+
+const wasteTypes = ["Plastik", "Kertas", "Kaca", "Organik", "B3"]
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function DashboardMain() {
-  // Handle search term change
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-  };
-  
-  const [garbageData, setGarbageData] = useState<any[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const recordsPerPage = 15;
-  const [selectedRecord, setSelectedRecord] = useState<any>(null);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-
-  // Fetch data (adjust according to your project setup)
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  // Handle row double-click to open modal with the selected record
-  const handleRowDoubleClick = (record: any) => {
-    setSelectedRecord(record); // Set selected record
-    setIsModalOpen(true); // Open modal
-  };
-
-  // Fungsi untuk menghitung poin berdasarkan berat
-  const calculatePoints = (weight: number): number => {
-    const pointsPerKg = 10; // Misal 1 kg = 10 poin
-    return weight * pointsPerKg;
-  };
-
-  // Fungsi untuk memperbarui record
-  const updateData = async (id: string, weight: number, type: string) => {
-    try {
-      const newPoints = calculatePoints(weight);
-      const response = await fetch('/api/supabase', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          table: 'pengumpulan_sampah',
-          record: { id, berat: weight, jenis_sampah: type, poin: newPoints }
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update data');
-      }
-
-      toast({
-        title: "Sukses",
-        description: "Data berhasil diperbarui.",
-      });
-
-      setGarbageData(prevData =>
-        prevData.map(record =>
-          record.id === id
-            ? { ...record, berat: weight, jenis_sampah: type, poin: newPoints }
-            : record
-        )
-      );
-    } catch (error) {
-      console.error('Error updating data:', error);
-      toast({
-        title: "Error",
-        description: "Gagal memperbarui data.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Calculate total pages
-  const totalPages = Math.ceil(garbageData.length / recordsPerPage);
-
-  // Get records to display for the current page
-  const currentRecords = garbageData.slice(
-    (currentPage - 1) * recordsPerPage,
-    currentPage * recordsPerPage
-  );
-
-  // Handle pagination page change
-  const goToPage = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page); // Set the page
-    }
-  };
-
-  const [users, setUsers] = useState<User[]>([])
+  const router = useRouter()
+  const { toast } = useToast()
+  const { user, loading, logout } = useAuth()
+  const [garbageData, setGarbageData] = useState<GarbageRecord[]>([])
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [incidents, setIncidents] = useState<Incident[]>([])
-  const [newRecord, setNewRecord] = useState({
-    berat: '',
-    nama_pemilik: '',
-    rt: '',
-    rw: '',
-    desa: '',
-    jenis_sampah: '',
-  })
-  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [searchTerm, setSearchTerm] = useState("")
   const [totalWeight, setTotalWeight] = useState(0)
   const [uniqueLocations, setUniqueLocations] = useState(0)
   const [recyclingRate, setRecyclingRate] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { toast } = useToast()
+  const [selectedRecord, setSelectedRecord] = useState<GarbageRecord | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
+  const [newRecord, setNewRecord] = useState({
+    berat: "",
+    namaPemilik: "",
+    rt: "",
+    rw: "",
+    jenisSampah: "",
+  })
+  const [desaInfo, setDesaInfo] = useState<Desa | null>(null)
+  const recordsPerPage = 15
 
   useEffect(() => {
-    fetchData()
-  }, [])
-
-  useEffect(() => {
-    if (garbageData.length > 0) {
-      const total = garbageData.reduce((sum, record) => sum + record.berat, 0)
-      setTotalWeight(total)
-      const locations = new Set(garbageData.map(record => `${record.desa}-${record.rw}-${record.rt}`))
-      setUniqueLocations(locations.size)
-      const recyclableWaste = garbageData.filter(record => ['Plastik', 'Kertas', 'Kaca'].includes(record.jenis_sampah))
-      const recyclableWeight = recyclableWaste.reduce((sum, record) => sum + record.berat, 0)
-      setRecyclingRate((recyclableWeight / total) * 100)
+    if (!loading && !user) {
+      router.push("/login")
+    } else if (user) {
+      fetchDesaInfo(user.desaId)
+      fetchData()
     }
-  }, [garbageData])
+  }, [user, loading, router])
 
-  const fetchData = async () => {
+  const fetchDesaInfo = async (desaId: string) => {
+    // ✅ Pastikan `user` tidak null sebelum mengakses `user.role`
+    if (!user || user.role === "SUPERADMIN") return
+
+    try {
+      const response = await axios.get(`${API_URL}/api/desa?id=${desaId}`)
+      setDesaInfo(response.data)
+    } catch (error) {
+      console.error("Error fetching desa info:", error)
+      toast({
+        title: "Error",
+        description: "Gagal mengambil informasi desa.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchData = useCallback(async () => {
+    if (!user) return
+
     setIsLoading(true)
     setError(null)
     try {
-      const [garbageResponse, userResponse, incidentResponse] = await Promise.all([
-        fetch('/api/supabase?table=pengumpulan_sampah'),
-        fetch('/api/supabase?table=leaderboard'),
-        fetch('/api/supabase?table=insiden')
+      const [garbageResponse, leaderboardResponse, incidentResponse] = await Promise.allSettled([
+        axios.get(`${API_URL}/api/pengumpulan-sampah?desaId=${user.desaId}`, {
+          headers: { "x-user-role": user.role },
+        }),
+        axios.get(`${API_URL}/api/leaderboard?desaId=${user.desaId}`, {
+          headers: { "x-user-role": user.role },
+        }),
+        axios.get(`${API_URL}/api/insiden?desaId=${user.desaId}`, {
+          headers: { "x-user-role": user.role },
+        }),
       ])
 
-      if (!garbageResponse.ok) throw new Error(`Error fetching garbage data: ${garbageResponse.statusText}`)
-      if (!userResponse.ok) throw new Error(`Error fetching user data: ${userResponse.statusText}`)
-      if (!incidentResponse.ok) throw new Error(`Error fetching incident data: ${incidentResponse.statusText}`)
+      if (garbageResponse.status === "fulfilled") {
+        setGarbageData(garbageResponse.value.data || [])
+        const total = garbageResponse.value.data.reduce(
+          (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
+          0,
+        )
+        setTotalWeight(total)
 
-      const garbageData = await garbageResponse.json()
-      const userData = await userResponse.json()
-      const incidentData = await incidentResponse.json()
+        const locations = new Set(
+          garbageResponse.value.data.map((record: GarbageRecord) => `${record.rt}-${record.rw}`),
+        )
+        setUniqueLocations(locations.size)
 
-      setGarbageData(garbageData || [])
-      setUsers(userData || [])
-      setIncidents(incidentData || [])
+        const recyclableWaste = garbageResponse.value.data.filter((record: GarbageRecord) =>
+          ["Plastik", "Kertas", "Kaca"].includes(record.jenisSampah),
+        )
+        const recyclableWeight = recyclableWaste.reduce(
+          (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
+          0,
+        )
+
+        const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0
+        setRecyclingRate(recyclingRate)
+      }
+
+      if (leaderboardResponse.status === "fulfilled") {
+        setLeaderboard(leaderboardResponse.value.data || [])
+      }
+
+      if (incidentResponse.status === "fulfilled") {
+        setIncidents(incidentResponse.value.data || [])
+      } else if (incidentResponse.status === "rejected" && incidentResponse.reason?.response?.status !== 403) {
+        throw incidentResponse.reason
+      }
     } catch (error) {
-      console.error('Error fetching data:', error)
+      console.error("Error fetching data:", error)
+      setError("Failed to fetch data. Please try again later.")
       toast({
         title: "Error",
         description: "Gagal mengambil data. Silakan coba lagi nanti.",
@@ -206,46 +198,81 @@ export default function DashboardMain() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user, toast])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setNewRecord(prev => ({ ...prev, [name]: value }))
+    setNewRecord((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const calculatePoints = (weight: number, wasteType: string): number => {
+    // Simple point calculation, can be adjusted based on specific rules
+    const basePoints = weight * 10
+    const multiplier = wasteType === "Organik" ? 1 : 1.5
+    return Math.round(basePoints * multiplier)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      const response = await fetch('/api/supabase', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          table: 'pengumpulan_sampah',
-          record: {
-            berat: parseFloat(newRecord.berat),
-            nama_pemilik: newRecord.nama_pemilik,
-            rt: newRecord.rt,
-            rw: newRecord.rw,
-            desa: newRecord.desa,
-            jenis_sampah: newRecord.jenis_sampah,
-          }
-        }),
-      })
+    if (!user) return
 
-      if (!response.ok) {
-        throw new Error('Failed to submit data')
-      }
-
+    if (user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
       toast({
-        title: "Sukses",
-        description: "Data berhasil ditambahkan.",
+        title: "Error",
+        description: "Anda tidak memiliki izin untuk menambahkan data.",
+        variant: "destructive",
       })
-      setNewRecord({ berat: '', nama_pemilik: '', rt: '', rw: '', desa: '', jenis_sampah: '' })
-      fetchData()
+      return
+    }
+
+    try {
+      const weight = Number.parseFloat(newRecord.berat)
+      const points = calculatePoints(weight, newRecord.jenisSampah)
+      const currentTime = new Date().toISOString()
+
+      const response = await axios.post(
+        `${API_URL}/api/pengumpulan-sampah`,
+        {
+          desaId: user.desaId,
+          berat: weight,
+          namaPemilik: newRecord.namaPemilik,
+          rt: newRecord.rt,
+          rw: newRecord.rw,
+          jenisSampah: newRecord.jenisSampah,
+          poin: points,
+          waktu: currentTime,
+        },
+        {
+          headers: { "x-user-role": user.role },
+        },
+      )
+
+      if (response.status === 201) {
+        // Update leaderboard
+        await axios.post(
+          `${API_URL}/api/leaderboard`,
+          {
+            desaId: user.desaId,
+            namaPemilik: newRecord.namaPemilik,
+            totalPoin: points,
+            jumlahPengumpulan: 1,
+          },
+          {
+            headers: { "x-user-role": user.role },
+          },
+        )
+
+        toast({
+          title: "Sukses",
+          description: "Data berhasil ditambahkan dan leaderboard diperbarui.",
+        })
+        setNewRecord({ berat: "", namaPemilik: "", rt: "", rw: "", jenisSampah: "" })
+        fetchData()
+      } else {
+        throw new Error("Failed to add data")
+      }
     } catch (error) {
-      console.error('Error submitting new record:', error)
+      console.error("Error submitting new record:", error)
       toast({
         title: "Error",
         description: "Gagal menambahkan data. Silakan coba lagi.",
@@ -254,48 +281,129 @@ export default function DashboardMain() {
     }
   }
 
-  const filteredData = garbageData.filter(record =>
-    record.nama_pemilik.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    `${record.desa} ${record.rw} ${record.rt}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.jenis_sampah.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value)
+  }
+
+  const handleRowDoubleClick = (record: GarbageRecord) => {
+    setSelectedRecord(record)
+    setIsModalOpen(true)
+  }
+
+  const updateData = async (id: string, weight: number, type: string) => {
+    if (!user) return
+
+    if (user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+      toast({
+        title: "Error",
+        description: "Anda tidak memiliki izin untuk memperbarui data.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const points = calculatePoints(weight, type)
+      const response = await axios.put(`${API_URL}/api/pengumpulan-sampah/${id}`, {
+        berat: weight,
+        jenisSampah: type,
+        poin: points,
+      })
+
+      if (response.status === 200) {
+        toast({
+          title: "Sukses",
+          description: "Data berhasil diperbarui.",
+        })
+        fetchData()
+      } else {
+        throw new Error("Failed to update data")
+      }
+    } catch (error) {
+      console.error("Error updating data:", error)
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui data.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const filteredData = garbageData.filter(
+    (record) =>
+      record.namaPemilik.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${record.rt} ${record.rw}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.jenisSampah.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const chartData = garbageData.map(record => ({
+  const totalPages = Math.ceil(filteredData.length / recordsPerPage)
+  const currentRecords = filteredData.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage)
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
+
+  const chartData = garbageData.map((record) => ({
     date: new Date(record.waktu).toLocaleDateString(),
-    weight: record.berat
+    weight: record.berat,
   }))
 
-  const wasteComposition = wasteTypes.map(type => ({
+  const wasteComposition = wasteTypes.map((type) => ({
     name: type,
-    value: garbageData.filter(record => record.jenis_sampah === type).reduce((sum, record) => sum + record.berat, 0)
+    value: garbageData.filter((record) => record.jenisSampah === type).reduce((sum, record) => sum + record.berat, 0),
   }))
 
-  const locationPerformance = Array.from(new Set(garbageData.map(record => record.desa))).map(desa => ({
-    name: desa,
-    "Total Sampah": garbageData.filter(record => record.desa === desa).reduce((sum, record) => sum + record.berat, 0)
-  }))
-  
+  const locationPerformance = Array.from(new Set(garbageData.map((record) => `RT ${record.rt} RW ${record.rw}`))).map(
+    (location) => ({
+      name: location,
+      "Total Sampah": garbageData
+        .filter((record) => `RT ${record.rt} RW ${record.rw}` === location)
+        .reduce((sum, record) => sum + record.berat, 0),
+    }),
+  )
+
+  const handleLogout = () => {
+    logout()
+    router.push("/login")
+  }
+
+  if (loading) {
+    return <div>Loading...</div>
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>
+  }
+
   return (
     <main className="container mx-auto px-4 py-8">
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{error}</span>
+      {user && (
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-green-800">
+            Selamat datang, {user.name} ({user.role})
+          </h1>
+          <Button onClick={handleLogout}>Logout</Button>
         </div>
       )}
-      <h1 className="text-4xl font-bold text-green-800 mb-8">Dashboard Manajemen Sampah AI</h1>
+      {desaInfo && (
+        <h2 className="text-2xl font-semibold text-green-600 mb-8">
+          Desa {desaInfo.nama}, Kecamatan {desaInfo.kecamatan}, {desaInfo.kabupaten}, {desaInfo.provinsi}
+        </h2>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <DashboardCard
           icon={<FaTrash />}
           title="Total Sampah Terkumpul"
-          value={`${totalWeight.toFixed(2)} kg`}
+          value={`${(Number.parseFloat(totalWeight as unknown as string) || 0).toFixed(2)} kg`}
           color="from-green-400 to-green-600"
         />
         <DashboardCard
           icon={<FaRecycle />}
           title="Tingkat Daur Ulang"
-          value={`${recyclingRate.toFixed(2)}%`}
+          value={`${(Number(recyclingRate) || 0).toFixed(2)}%`}
           color="from-teal-400 to-teal-600"
         />
         <DashboardCard
@@ -319,169 +427,169 @@ export default function DashboardMain() {
               <CardTitle>Daftar Pengumpulan Sampah</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label htmlFor="berat" className="block text-sm font-medium text-gray-700">Berat (kg)</label>
-                    <Input
-                      type="number"
-                      id="berat"
-                      name="berat"
-                      value={newRecord.berat}
-                      onChange={handleInputChange}
-                      required
-                    />
+              {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label htmlFor="berat" className="block text-sm font-medium text-gray-700">
+                        Berat (kg)
+                      </label>
+                      <Input
+                        type="number"
+                        id="berat"
+                        name="berat"
+                        value={newRecord.berat}
+                        onChange={handleInputChange}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="namaPemilik" className="block text-sm font-medium text-gray-700">
+                        Nama Pemilik
+                      </label>
+                      <Input
+                        type="text"
+                        id="namaPemilik"
+                        name="namaPemilik"
+                        value={newRecord.namaPemilik}
+                        onChange={handleInputChange}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="rt" className="block text-sm font-medium text-gray-700">
+                        RT
+                      </label>
+                      <Input type="text" id="rt" name="rt" value={newRecord.rt} onChange={handleInputChange} required />
+                    </div>
+                    <div>
+                      <label htmlFor="rw" className="block text-sm font-medium text-gray-700">
+                        RW
+                      </label>
+                      <Input type="text" id="rw" name="rw" value={newRecord.rw} onChange={handleInputChange} required />
+                    </div>
+                    <div>
+                      <label htmlFor="jenisSampah" className="block text-sm font-medium text-gray-700">
+                        Jenis Sampah
+                      </label>
+                      <Select
+                        name="jenisSampah"
+                        value={newRecord.jenisSampah}
+                        onValueChange={(value) => setNewRecord((prev) => ({ ...prev, jenisSampah: value }))}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pilih Jenis Sampah" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {wasteTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div>
-                    <label htmlFor="nama_pemilik" className="block text-sm font-medium text-gray-700">Nama Pemilik</label>
-                    <Input
-                      type="text"
-                      id="nama_pemilik"
-                      name="nama_pemilik"
-                      value={newRecord.nama_pemilik}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="rt" className="block text-sm font-medium text-gray-700">RT</label>
-                    <Input
-                      type="text"
-                      id="rt"
-                      name="rt"
-                      value={newRecord.rt}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="rw" className="block text-sm font-medium text-gray-700">RW</label>
-                    <Input
-                      type="text"
-                      id="rw"
-                      name="rw"
-                      value={newRecord.rw}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="desa" className="block text-sm font-medium text-gray-700">Desa</label>
-                    <Input
-                      type="text"
-                      id="desa"
-                      name="desa"
-                      value={newRecord.desa}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="jenis_sampah" className="block text-sm font-medium text-gray-700">Jenis Sampah</label>
-                    <Select
-                      name="jenis_sampah"
-                      value={newRecord.jenis_sampah}
-                      onValueChange={(value) => setNewRecord(prev => ({ ...prev, jenis_sampah: value }))}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Pilih Jenis Sampah" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {wasteTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <Button type="submit" className="w-full">
+                    Kirim Data Pengumpulan
+                  </Button>
+                </form>
+              )}
+
+              <div className="mt-8">
+                <div className="flex items-center border border-gray-300 rounded-lg mb-4 p-2">
+                  <FaSearch className="text-gray-500 mr-2" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    placeholder="Cari berdasarkan nama, alamat, atau jenis sampah..."
+                    className="w-full p-2 border-0 outline-none"
+                  />
                 </div>
-                <Button type="submit" className="w-full">
-                  Kirim Data Pengumpulan
-                </Button>
-              </form>
+
+                <div className="overflow-x-auto shadow-lg rounded-lg">
+                  <table className="min-w-full table-auto border-separate border-spacing-0">
+                    <thead className="bg-gradient-to-r from-green-400 to-green-600 text-white">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Berat</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Nama Pemilik</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Alamat</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Jenis Sampah</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Poin</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Waktu</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {currentRecords.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="text-center py-4 text-gray-600">
+                            Tidak ada data
+                          </td>
+                        </tr>
+                      ) : (
+                        currentRecords.map((record) => (
+                          <tr
+                            key={record.id}
+                            onDoubleClick={() => handleRowDoubleClick(record)}
+                            className="cursor-pointer hover:bg-green-100 transition-colors duration-300"
+                          >
+                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.berat}</td>
+                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.namaPemilik}</td>
+                            <td className="px-6 py-4 border-t border-b border-gray-300">{`RT ${record.rt} RW ${record.rw}`}</td>
+                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.jenisSampah}</td>
+                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.poin}</td>
+                            <td className="px-6 py-4 border-t border-b border-gray-300">
+                              {new Date(record.waktu).toLocaleString("id-ID")}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 bg-green-500 text-white rounded-l"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-4 py-2">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 bg-green-500 text-white rounded-r"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+
+              {selectedRecord && isModalOpen && (
+                <EditModal
+                  isOpen={isModalOpen}
+                  onClose={() => setIsModalOpen(false)}
+                  currentData={selectedRecord}
+                  updateData={updateData}
+                />
+              )}
             </CardContent>
           </Card>
 
-          <br />
-          <div>
-            {/* Search Input with Icon */}
-            <div className="flex items-center border border-gray-300 rounded-lg mb-4 p-2">
-              <FaSearch className="text-gray-500 mr-2" /> {/* Icon */}
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={handleSearchChange} // Handle search input change
-                placeholder="Cari berdasarkan nama, alamat, atau jenis sampah..."
-                className="w-full p-2 border-0 outline-none"
-              />
-            </div>
-
-            {/* Table to show the data */}
-            <div className="overflow-x-auto shadow-lg rounded-lg">
-              <table className="min-w-full table-auto border-separate border-spacing-0">
-                <thead className="bg-gradient-to-r from-green-400 to-green-600 text-white">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Berat</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Nama Pemilik</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Alamat</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Jenis Sampah</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Poin</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Waktu</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white">
-                  {filteredData.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-4 text-gray-600">Tidak ada data</td>
-                    </tr>
-                  ) : (
-                    filteredData.map((record) => (
-                      <tr
-                        key={record.id}
-                        onDoubleClick={() => handleRowDoubleClick(record)}
-                        className="cursor-pointer hover:bg-green-100 transition-colors duration-300"
-                      >
-                        <td className="px-6 py-4 border-t border-b border-gray-300">{record.berat}</td>
-                        <td className="px-6 py-4 border-t border-b border-gray-300">{record.nama_pemilik}</td>
-                        <td className="px-6 py-4 border-t border-b border-gray-300">{`${record.desa} RT ${record.rt} RW ${record.rw}`}</td>
-                        <td className="px-6 py-4 border-t border-b border-gray-300">{record.jenis_sampah}</td>
-                        <td className="px-6 py-4 border-t border-b border-gray-300">{record.poin}</td>
-                        <td className="px-6 py-4 border-t border-b border-gray-300">{new Date(record.waktu).toLocaleString('id-ID')}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="flex justify-center mt-4">
-              <button
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-4 py-2 bg-green-500 text-white rounded-l"
-              >
-                Previous
-              </button>
-              <span className="px-4 py-2">{currentPage} / {totalPages}</span>
-              <button
-                onClick={() => goToPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 bg-green-500 text-white rounded-r"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-
-          {selectedRecord && isModalOpen && (
-            <EditModal
-              isOpen={isModalOpen}
-              onClose={() => setIsModalOpen(false)}
-              currentData={selectedRecord}
-              updateData={updateData}
-            />
+          {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
+            <Card className="mt-8">
+              <CardHeader>
+                <CardTitle>Input Jadwal Pengumpulan</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CollectionScheduleForm user={user} />
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
@@ -497,7 +605,7 @@ export default function DashboardMain() {
                     data={chartData}
                     index="date"
                     categories={["weight"]}
-                    colors={["#10B981"]}  
+                    colors={["#10B981"]}
                     valueFormatter={(value) => `${value} kg`}
                     yAxisWidth={40}
                   />
@@ -531,7 +639,7 @@ export default function DashboardMain() {
                     index="name"
                     categories={["Total Sampah"]}
                     colors={["teal"]}
-                    valueFormatter={(value) => `${value.toFixed(2)} kg`}
+                    valueFormatter={(value) => `${(Number(value) || 0).toFixed(2)} kg`}
                     yAxisWidth={48}
                   />
                 </div>
@@ -544,7 +652,7 @@ export default function DashboardMain() {
               </CardHeader>
               <CardContent>
                 <div>
-                  <WawasanAI garbageData={garbageData} users={users} />
+                  <WawasanAI garbageData={garbageData} users={leaderboard} />
                 </div>
               </CardContent>
             </Card>
@@ -553,7 +661,7 @@ export default function DashboardMain() {
 
         <TabsContent value="gamification">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <RankingList users={users} />
+            <RankingList users={leaderboard} />
 
             <Card>
               <CardHeader>
@@ -596,9 +704,9 @@ export default function DashboardMain() {
               <CardContent>
                 <div className="h-[400px]">
                   <BarChart
-                    data={users.map(user => ({
-                      name: user.nama_pemilik,
-                      "Total Poin": user.total_poin
+                    data={leaderboard.map((user) => ({
+                      name: user.namaPemilik,
+                      "Total Poin": user.totalPoin,
                     }))}
                     index="name"
                     categories={["Total Poin"]}
@@ -635,11 +743,11 @@ export default function DashboardMain() {
                         <TableCell>{incident.type}</TableCell>
                         <TableCell>{incident.location}</TableCell>
                         <TableCell>
-                          <Badge variant={incident.status === 'Pending' ? 'destructive' : 'outline'}>
+                          <Badge variant={incident.status === "Pending" ? "destructive" : "outline"}>
                             {incident.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>{new Date(incident.time).toLocaleString('id-ID')}</TableCell>
+                        <TableCell>{new Date(incident.time).toLocaleString("id-ID")}</TableCell>
                         <TableCell>
                           <Dialog>
                             <DialogTrigger asChild>
@@ -666,7 +774,7 @@ export default function DashboardMain() {
                                 <div className="grid grid-cols-4 items-center gap-4">
                                   <label className="text-right font-medium">Status</label>
                                   <div className="col-span-3">
-                                    <Badge variant={incident.status === 'Pending' ? 'destructive' : 'outline'}>
+                                    <Badge variant={incident.status === "Pending" ? "destructive" : "outline"}>
                                       {incident.status}
                                     </Badge>
                                   </div>
@@ -688,7 +796,9 @@ export default function DashboardMain() {
                                 {incident.time_handled && (
                                   <div className="grid grid-cols-4 items-center gap-4">
                                     <label className="text-right font-medium">Waktu Penanganan</label>
-                                    <div className="col-span-3">{new Date(incident.time_handled).toLocaleString('id-ID')}</div>
+                                    <div className="col-span-3">
+                                      {new Date(incident.time_handled).toLocaleString("id-ID")}
+                                    </div>
                                   </div>
                                 )}
                               </div>
@@ -705,7 +815,7 @@ export default function DashboardMain() {
               </CardContent>
             </Card>
 
-            <IncidentForm onSubmit={fetchData} />
+            {user?.role !== "WARGA" && <IncidentForm onSubmit={fetchData} />}
 
             <Card className="md:col-span-2">
               <CardHeader>
@@ -727,7 +837,17 @@ export default function DashboardMain() {
   )
 }
 
-function DashboardCard({ icon, title, value, color }: { icon: React.ReactNode; title: string; value: string; color: string }) {
+function DashboardCard({
+  icon,
+  title,
+  value,
+  color,
+}: {
+  icon: React.ReactNode
+  title: string
+  value: string
+  color: string
+}) {
   return (
     <motion.div
       className={`bg-gradient-to-r ${color} rounded-lg shadow-md p-6 text-white`}
@@ -746,36 +866,88 @@ function DashboardCard({ icon, title, value, color }: { icon: React.ReactNode; t
 }
 
 function CollectionSchedule() {
+  const [schedules, setSchedules] = useState<JadwalPengumpulan[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
+
+  useEffect(() => {
+    const fetchSchedules = async () => {
+      if (!user) return
+
+      try {
+        // ✅ Tentukan URL berdasarkan role user
+        const url =
+          user.role === "SUPERADMIN"
+            ? `${API_URL}/api/jadwal-pengumpulan`
+            : `${API_URL}/api/jadwal-pengumpulan?desaId=${user.desaId}`
+
+        // ✅ Tambahkan Header `x-user-role`
+        const response = await axios.get(url, {
+          headers: { "x-user-role": user.role },
+        })
+
+        setSchedules(response.data)
+      } catch (err) {
+        setError("Error fetching schedules")
+        console.error(err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchSchedules()
+  }, [user])
+
+  if (isLoading) return <div>Loading schedules...</div>
+  if (error) return <div>Error: {error}</div>
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Jadwal Pengumpulan</CardTitle>
       </CardHeader>
       <CardContent>
-        <ul className="space-y-2">
-          <ScheduleItem day="Senin" areas="RT 01, RT 02" />
-          <ScheduleItem day="Rabu" areas="RT 03, RT 04" />
-          <ScheduleItem day="Jumat" areas="RT 05, RT 06" />
-        </ul>
+        {schedules.length === 0 ? (
+          <div>No schedules available</div>
+        ) : (
+          <ul className="space-y-2">
+            {schedules.map((schedule) => (
+              <ScheduleItem
+                key={schedule.id}
+                day={schedule.hari}
+                startTime={schedule.waktuMulai}
+                endTime={schedule.waktuSelesai}
+              />
+            ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   )
 }
 
-function ScheduleItem({ day, areas }: { day: string; areas: string }) {
+function ScheduleItem({ day, startTime, endTime }: { day: string; startTime: string; endTime: string }) {
+  const formatTime = (time: string) => {
+    return new Date(time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+  }
+
   return (
     <li className="flex items-center space-x-2 text-gray-700">
       <FaCalendarAlt className="text-green-600" />
       <span className="font-medium">{day}:</span>
-      <span>{areas}</span>
+      <span>
+        {formatTime(startTime)} - {formatTime(endTime)}
+      </span>
     </li>
   )
 }
 
 function CollectionSummary({ garbageData }: { garbageData: GarbageRecord[] }) {
   const totalCollections = garbageData.length
-  const totalWeight = garbageData.reduce((sum, record) => sum + record.berat, 0)
+  const totalWeight = garbageData.reduce((sum, record) => sum + (Number(record.berat) || 0), 0)
   const averageWeight = totalWeight / totalCollections || 0
+  const percentageCollected = (totalCollections / (totalCollections + 100)) * 100 // Assuming 100 as a baseline for total possible collections
 
   return (
     <Card>
@@ -790,11 +962,15 @@ function CollectionSummary({ garbageData }: { garbageData: GarbageRecord[] }) {
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Total Berat</p>
-            <p className="text-2xl font-bold">{totalWeight.toFixed(2)} kg</p>
+            <p className="text-2xl font-bold">{(Number(totalWeight) || 0).toFixed(2)} kg</p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Rata-rata Berat per Pengumpulan</p>
             <p className="text-2xl font-bold">{averageWeight.toFixed(2)} kg</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-500">Persentase Pengumpulan</p>
+            <p className="text-2xl font-bold">{percentageCollected.toFixed(2)}%</p>
           </div>
         </div>
       </CardContent>
@@ -802,7 +978,17 @@ function CollectionSummary({ garbageData }: { garbageData: GarbageRecord[] }) {
   )
 }
 
-function Achievement({ title, description, icon, progress }: { title: string; description: string; icon: React.ReactNode; progress: number }) {
+function Achievement({
+  title,
+  description,
+  icon,
+  progress,
+}: {
+  title: string
+  description: string
+  icon: React.ReactNode
+  progress: number
+}) {
   return (
     <div className="bg-white p-4 rounded-lg shadow">
       <div className="flex items-center space-x-2 mb-2">
@@ -812,6 +998,127 @@ function Achievement({ title, description, icon, progress }: { title: string; de
       <p className="text-sm text-gray-600 mb-2">{description}</p>
       <Progress value={progress} className="w-full" />
     </div>
+  )
+}
+
+function CollectionScheduleForm({ user }: { user: { desaId: string; role: string } }) {
+  const [newSchedule, setNewSchedule] = useState({
+    hari: "",
+    waktuMulai: "",
+    waktuSelesai: "",
+  })
+  const { toast } = useToast()
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setNewSchedule((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+      toast({
+        title: "Error",
+        description: "Anda tidak memiliki izin untuk menambahkan jadwal.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/jadwal-pengumpulan`,
+        {
+          desaId: user.desaId,
+          hari: newSchedule.hari.toUpperCase(),
+          waktuMulai: newSchedule.waktuMulai,
+          waktuSelesai: newSchedule.waktuSelesai,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-role": user.role, // Tambahkan header x-user-role
+          },
+        },
+      )
+
+      if (response.status === 201) {
+        toast({
+          title: "Sukses",
+          description: "Jadwal berhasil ditambahkan.",
+        })
+        setNewSchedule({ hari: "", waktuMulai: "", waktuSelesai: "" })
+      } else {
+        throw new Error("Failed to add schedule")
+      }
+    } catch (error) {
+      console.error("Error submitting new schedule:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menambahkan jadwal. Silakan coba lagi.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label htmlFor="hari" className="block text-sm font-medium text-gray-700">
+            Hari
+          </label>
+          <Select
+            name="hari"
+            value={newSchedule.hari}
+            onValueChange={(value) =>
+              handleInputChange({ target: { name: "hari", value } } as React.ChangeEvent<HTMLSelectElement>)
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Pilih Hari" />
+            </SelectTrigger>
+            <SelectContent>
+              {["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"].map((day) => (
+                <SelectItem key={day} value={day}>
+                  {day}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label htmlFor="waktuMulai" className="block text-sm font-medium text-gray-700">
+            Waktu Mulai
+          </label>
+          <Input
+            type="time"
+            id="waktuMulai"
+            name="waktuMulai"
+            value={newSchedule.waktuMulai}
+            onChange={handleInputChange}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="waktuSelesai" className="block text-sm font-medium text-gray-700">
+            Waktu Selesai
+          </label>
+          <Input
+            type="time"
+            id="waktuSelesai"
+            name="waktuSelesai"
+            value={newSchedule.waktuSelesai}
+            onChange={handleInputChange}
+            required
+          />
+        </div>
+      </div>
+      <Button type="submit" className="w-full">
+        Tambah Jadwal Pengumpulan
+      </Button>
+    </form>
   )
 }
 

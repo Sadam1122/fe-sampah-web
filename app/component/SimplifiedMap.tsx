@@ -1,4 +1,3 @@
-import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
@@ -15,8 +14,8 @@ interface SimplifiedMapProps {
 }
 
 export function SimplifiedMap({ incidents }: SimplifiedMapProps) {
-  const pendingIncidents = incidents.filter(incident => incident.status === 'Pending')
-  const resolvedIncidents = incidents.filter(incident => incident.status !== 'Pending')
+  const pendingIncidents = incidents.filter((incident) => incident.status === "Pending")
+  const resolvedIncidents = incidents.filter((incident) => incident.status !== "Pending")
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -26,7 +25,7 @@ export function SimplifiedMap({ incidents }: SimplifiedMapProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {pendingIncidents.map(incident => (
+            {pendingIncidents.map((incident) => (
               <div key={incident.id} className="flex justify-between items-center">
                 <span>{incident.type}</span>
                 <Badge variant="destructive">Pending</Badge>
@@ -41,7 +40,7 @@ export function SimplifiedMap({ incidents }: SimplifiedMapProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {resolvedIncidents.map(incident => (
+            {resolvedIncidents.map((incident) => (
               <div key={incident.id} className="flex justify-between items-center">
                 <span>{incident.type}</span>
                 <Badge variant="outline">Selesai</Badge>

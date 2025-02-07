@@ -6,14 +6,14 @@ import { FaRobot } from "react-icons/fa";
 interface WawasanAIProps {
   garbageData: Array<{
     berat: number;
-    nama_pemilik: string;
-    jenis_sampah: string;
+    namaPemilik: string;
+    jenisSampah: string;
     waktu: string;
     rt: string;
   }>;
   users: Array<{
-    nama_pemilik: string;
-    total_poin: number;
+    namaPemilik: string;
+    totalPoin: number;
   }>;
 }
 
@@ -116,14 +116,14 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
     const fuelSavings = fuzzyFuelSavings(rtVolumes);
 
     const plasticWaste = garbageData.filter(
-      (record) => record.jenis_sampah === "Plastik"
+      (record) => record.jenisSampah === "Plastik"
     );
     const plasticRecyclingRate = (plasticWaste.length / garbageData.length) * 100;
 
     const recyclingStatus = fuzzyPlasticRecycling(plasticRecyclingRate);
 
     const topCollector = users.reduce(
-      (max, user) => (max.total_poin > user.total_poin ? max : user)
+      (max, user) => (max.totalPoin > user.totalPoin ? max : user)
     );
 
     return [
@@ -179,7 +179,7 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
         color: "text-black",
       },
       {
-        text: `${topCollector.nama_pemilik} adalah pengumpul terbaik dengan ${topCollector.total_poin} poin.`,
+        text: `${topCollector.namaPemilik} adalah pengumpul terbaik dengan ${topCollector.totalPoin} poin.`,
         values: {},
         color: "text-black",
       },

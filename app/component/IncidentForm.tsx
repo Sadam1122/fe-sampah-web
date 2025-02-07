@@ -1,155 +1,134 @@
-import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { useToast } from "@/hooks/use-toast"
-import { createClient } from '@supabase/supabase-js'
+import type React from "react";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import Cookies from "js-cookie";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+interface UserData {
+  id: string;
+  username: string;
+  role: string;
 }
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-const incidentTypes = ['Tempat Sampah Penuh', 'Pembuangan Ilegal', 'Peralatan Rusak', 'Lainnya']
-const statusOptions = ['Pending', 'Perbaikan', 'Selesai']
+interface IncidentData {
+  id?: string;
+  desaId?: string;
+  type: string;
+  location: string;
+  description: string;
+  status: "PENDING" | "IN_PROGRESS" | "RESOLVED";
+  time?: string;
+  reporterId: string;
+  handledBy?: string;
+  timeHandled?: string;
+}
 
 interface IncidentFormProps {
-  onSubmit: () => void
+  onSubmit: (incident: IncidentData) => Promise<void>;
 }
 
 export function IncidentForm({ onSubmit }: IncidentFormProps) {
-  const [newIncident, setNewIncident] = useState({
-    type: '',
-    location: '',
-    description: '',
-    status: 'Pending',
-  })
-  const { toast } = useToast()
+  const [incidentData, setIncidentData] = useState<IncidentData>({
+    type: "",
+    location: "",
+    description: "",
+    status: "PENDING",
+    reporterId: "",
+  });
 
-  const handleIncidentInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setNewIncident(prev => ({ ...prev, [name]: value }))
-  }
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const { toast } = useToast();
 
-  const handleIncidentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // useEffect(() => {
+  //   const fetchUserData = async () => {
+  //     try {
+  //       const response = await fetch("/api/users", {
+  //         method: "GET",
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //           "x-user-role": Cookies.get("role") || "", // Mengirimkan role sebagai header
+  //         },
+  //       });
+  
+  //       if (!response.ok) {
+  //         throw new Error(`Gagal mendapatkan data user: ${response.status} ${response.statusText}`);
+  //       }
+  
+  //       const data = await response.json();
+  //       setUserData(data as UserData);
+  //       setIncidentData((prev) => ({ ...prev, reporterId: data.id }));
+  
+  //     } catch (error) {
+  //       console.error("Error fetching user data:", error);
+  //       toast({ title: "Error", description: "Gagal mendapatkan data pengguna", variant: "destructive" });
+  //     }
+  //   };
+  
+  //   fetchUserData();
+  // }, []);
+  
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      const { data, error } = await supabase
-        .from('insiden')
-        .insert([
-          {
-            type: newIncident.type,
-            location: newIncident.location,
-            description: newIncident.description,
-            status: newIncident.status,
-            reporter_id: 'Anonymous', // Replace with actual user ID when authentication is implemented
-          },
-        ])
+      const response = await fetch("/api/insiden", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(incidentData),
+      });
 
-      if (error) throw error
+      if (!response.ok) throw new Error("Gagal mengirim laporan insiden");
 
-      toast({
-        title: "Sukses",
-        description: "Insiden berhasil dilaporkan.",
-      })
-      setNewIncident({ type: '', location: '', description: '', status: 'Pending' })
-      onSubmit()
+      toast({ title: "Success", description: "Laporan insiden berhasil dikirim" });
+      await onSubmit(incidentData);
+
     } catch (error) {
-      console.error('Error submitting new incident:', error)
-      toast({
-        title: "Error",
-        description: "Gagal melaporkan insiden. Silakan coba lagi.",
-        variant: "destructive",
-      })
+      console.error("Error submitting incident:", error);
+      toast({ title: "Error", description: "Gagal mengirim laporan insiden", variant: "destructive" });
     }
-  }
+  };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Laporkan Insiden Baru</CardTitle>
+        <CardTitle>Laporkan Insiden</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleIncidentSubmit} className="space-y-4">
-          {/* Select Jenis Insiden */}
-          <div>
-            <label htmlFor="incidentType" className="block text-sm font-medium text-gray-700">Jenis Insiden</label>
-            <Select
-              name="type"
-              value={newIncident.type}
-              onValueChange={(value) => setNewIncident(prev => ({ ...prev, type: value }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih Jenis Insiden" />
-              </SelectTrigger>
-              <SelectContent>
-                {incidentTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Input Lokasi */}
-          <div>
-            <label htmlFor="incidentLocation" className="block text-sm font-medium text-gray-700">Lokasi</label>
-            <Input
-              id="incidentLocation"
-              name="location"
-              value={newIncident.location}
-              onChange={handleIncidentInputChange}
-              placeholder="Masukkan lokasi insiden"
-              required
-            />
-          </div>
-
-          {/* Input Deskripsi */}
-          <div>
-            <label htmlFor="incidentDescription" className="block text-sm font-medium text-gray-700">Deskripsi</label>
-            <Textarea
-              id="incidentDescription"
-              name="description"
-              value={newIncident.description}
-              onChange={handleIncidentInputChange}
-              rows={3}
-              placeholder="Jelaskan insiden"
-              required
-            />
-          </div>
-
-          {/* Select Status */}
-          <div>
-            <label htmlFor="incidentStatus" className="block text-sm font-medium text-gray-700">Status</label>
-            <Select
-              name="status"
-              value={newIncident.status}
-              onValueChange={(value) => setNewIncident(prev => ({ ...prev, status: value }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Submit Button */}
-          <Button type="submit" className="w-full">Laporkan Insiden</Button>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Select onValueChange={(value) => setIncidentData((prev) => ({ ...prev, type: value }))} required>
+            <SelectTrigger>
+              <SelectValue placeholder="Pilih Jenis Insiden" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="illegal_dumping">Pembuangan Ilegal</SelectItem>
+              <SelectItem value="overflow">Tempat Sampah Penuh</SelectItem>
+              <SelectItem value="hazardous_waste">Sampah Berbahaya</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="Lokasi"
+            value={incidentData.location}
+            onChange={(e) => setIncidentData((prev) => ({ ...prev, location: e.target.value }))}
+            required
+          />
+          <Input
+            placeholder="Deskripsi"
+            value={incidentData.description}
+            onChange={(e) => setIncidentData((prev) => ({ ...prev, description: e.target.value }))}
+            required
+          />
+          {userData && (
+            <p className="text-sm text-gray-500">
+              Dilaporkan oleh: {userData.username} ({userData.role})
+            </p>
+          )}
+          <Button type="submit">Laporkan</Button>
         </form>
       </CardContent>
     </Card>
-  )
+  );
 }

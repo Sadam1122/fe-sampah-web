@@ -9,7 +9,8 @@ interface User {
   id: string
   email: string
   name: string
-  role: "superadmin" | "admin" | "staff"
+  desaId: string
+  role: "SUPERADMIN" | "ADMIN" | "WARGA"
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
@@ -41,6 +42,7 @@ export function useAuth() {
         name: data.user.name,
         email: data.user.email,
         role: data.user.role,
+        desaId: data.user.desaId
       }
 
       Cookies.set("user", JSON.stringify(userData), { expires: 7 }) // Simpan di cookies

@@ -1,23 +1,21 @@
-import React from 'react'
-import { motion } from 'framer-motion'
+import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-interface User {
+interface LeaderboardEntry {
   id: string
-  nama_pemilik: string
-  email: string
-  total_poin: number
-  avatar: string
+  namaPemilik: string
+  totalPoin: number
+  jumlahPengumpulan: number
 }
 
 interface RankingListProps {
-  users: User[]
+  users: LeaderboardEntry[]
 }
 
 export function RankingList({ users }: RankingListProps) {
-  const sortedUsers = users.sort((a, b) => b.total_poin - a.total_poin)
+  const sortedUsers = users.sort((a, b) => b.totalPoin - a.totalPoin)
 
   return (
     <Card>
@@ -30,8 +28,8 @@ export function RankingList({ users }: RankingListProps) {
             <TableRow>
               <TableHead>Peringkat</TableHead>
               <TableHead>Pengguna</TableHead>
-              <TableHead>Level</TableHead>
               <TableHead>Poin</TableHead>
+              <TableHead>Jumlah Pengumpulan</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -46,14 +44,17 @@ export function RankingList({ users }: RankingListProps) {
                 <TableCell>
                   <div className="flex items-center space-x-2">
                     <Avatar>
-                      <AvatarImage src={user.avatar || `https://api.dicebear.com/6.x/initials/svg?seed=${user.nama_pemilik}`} alt={user.nama_pemilik} />
-                      <AvatarFallback>{user.nama_pemilik.charAt(0)}</AvatarFallback>
+                      <AvatarImage
+                        src={`https://api.dicebear.com/6.x/initials/svg?seed=${user.namaPemilik}`}
+                        alt={user.namaPemilik}
+                      />
+                      <AvatarFallback>{user.namaPemilik.charAt(0)}</AvatarFallback>
                     </Avatar>
-                    <span>{user.nama_pemilik}</span>
+                    <span>{user.namaPemilik}</span>
                   </div>
                 </TableCell>
-                <TableCell>{Math.floor(user.total_poin / 1000) + 1}</TableCell>
-                <TableCell>{user.total_poin}</TableCell>
+                <TableCell>{user.totalPoin}</TableCell>
+                <TableCell>{user.jumlahPengumpulan}</TableCell>
               </motion.tr>
             ))}
           </TableBody>
