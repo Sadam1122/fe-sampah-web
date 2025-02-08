@@ -22,13 +22,14 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { LineChart, BarChart, DonutChart } from "@/components/ui/charts"
+import { LineChart, BarChart, PieChart } from "@/components/ui/charts"
 import { IncidentForm } from "./IncidentForm"
 import { RankingList } from "./RankingList"
 import { SimplifiedMap } from "./SimplifiedMap"
 import WawasanAI from "./WawasanAI"
 import EditModal from "./EditModal"
 import { useAuth } from "../hook/useAuth"
+import { NewsSection } from "./NewsSection"
 import axios from "axios"
 import type React from "react"
 
@@ -56,7 +57,7 @@ interface Incident {
   id: string
   type: string
   location: string
-  status: string
+  status: "MENUNGGU" | "SEDANG_DITANGANI" | "SELESAI"
   time: string
   description: string
   reporter_id: string
@@ -118,8 +119,10 @@ export default function DashboardMain() {
     }
   }, [user, loading, router])
 
+
+
+
   const fetchDesaInfo = async (desaId: string) => {
-    // ✅ Pastikan `user` tidak null sebelum mengakses `user.role`
     if (!user || user.role === "SUPERADMIN") return
 
     try {
@@ -136,69 +139,72 @@ export default function DashboardMain() {
   }
 
   const fetchData = useCallback(async () => {
-    if (!user) return
-
-    setIsLoading(true)
-    setError(null)
+    if (!user) return;
+  
+    setIsLoading(true);
+    setError(null);
     try {
-      const [garbageResponse, leaderboardResponse, incidentResponse] = await Promise.allSettled([
+      const requests = [
         axios.get(`${API_URL}/api/pengumpulan-sampah?desaId=${user.desaId}`, {
           headers: { "x-user-role": user.role },
         }),
         axios.get(`${API_URL}/api/leaderboard?desaId=${user.desaId}`, {
           headers: { "x-user-role": user.role },
         }),
-        axios.get(`${API_URL}/api/insiden?desaId=${user.desaId}`, {
-          headers: { "x-user-role": user.role },
-        }),
-      ])
-
-      if (garbageResponse.status === "fulfilled") {
-        setGarbageData(garbageResponse.value.data || [])
-        const total = garbageResponse.value.data.reduce(
-          (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
-          0,
-        )
-        setTotalWeight(total)
-
-        const locations = new Set(
-          garbageResponse.value.data.map((record: GarbageRecord) => `${record.rt}-${record.rw}`),
-        )
-        setUniqueLocations(locations.size)
-
-        const recyclableWaste = garbageResponse.value.data.filter((record: GarbageRecord) =>
-          ["Plastik", "Kertas", "Kaca"].includes(record.jenisSampah),
-        )
-        const recyclableWeight = recyclableWaste.reduce(
-          (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
-          0,
-        )
-
-        const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0
-        setRecyclingRate(recyclingRate)
+      ];
+  
+      // Perbaikan perbandingan role
+      if (user.role !== "WARGA") {
+        requests.push(
+          axios.get(`${API_URL}/api/insiden?desaId=${user.desaId}`, {
+            headers: { "x-user-role": user.role },
+          })
+        );
       }
-
-      if (leaderboardResponse.status === "fulfilled") {
-        setLeaderboard(leaderboardResponse.value.data || [])
-      }
-
-      if (incidentResponse.status === "fulfilled") {
-        setIncidents(incidentResponse.value.data || [])
-      } else if (incidentResponse.status === "rejected" && incidentResponse.reason?.response?.status !== 403) {
-        throw incidentResponse.reason
+  
+      const responses = await Promise.all(requests);
+  
+      const [garbageResponse, leaderboardResponse, incidentResponse] = responses;
+  
+      setGarbageData(garbageResponse.data || []);
+      const total = garbageResponse.data.reduce(
+        (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
+        0
+      );
+      setTotalWeight(total);
+  
+      const locations = new Set(garbageResponse.data.map((record: GarbageRecord) => `${record.rt}-${record.rw}`));
+      setUniqueLocations(locations.size);
+  
+      const recyclableWaste = garbageResponse.data.filter((record: GarbageRecord) =>
+        ["Plastik", "Kertas", "Kaca"].includes(record.jenisSampah)
+      );
+      const recyclableWeight = recyclableWaste.reduce(
+        (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
+        0
+      );
+  
+      const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0;
+      setRecyclingRate(recyclingRate);
+  
+      setLeaderboard(leaderboardResponse.data || []);
+  
+      if (user.role !== "WARGA" && incidentResponse) {
+        setIncidents(incidentResponse.data || []);
       }
     } catch (error) {
-      console.error("Error fetching data:", error)
-      setError("Failed to fetch data. Please try again later.")
+      console.error("Error fetching data:", error);
+      setError("Gagal mengambil data. Silakan coba lagi nanti.");
       toast({
         title: "Error",
         description: "Gagal mengambil data. Silakan coba lagi nanti.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [user, toast])
+  }, [user, toast]);
+  
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -206,7 +212,6 @@ export default function DashboardMain() {
   }
 
   const calculatePoints = (weight: number, wasteType: string): number => {
-    // Simple point calculation, can be adjusted based on specific rules
     const basePoints = weight * 10
     const multiplier = wasteType === "Organik" ? 1 : 1.5
     return Math.round(basePoints * multiplier)
@@ -329,6 +334,42 @@ export default function DashboardMain() {
     }
   }
 
+  const updateIncidentStatus = async (id: string, newStatus: "MENUNGGU" | "SEDANG_DITANGANI" | "SELESAI") => {
+    if (!user || (user.role !== "ADMIN" && user.role !== "SUPERADMIN")) {
+      toast({
+        title: "Error",
+        description: "Anda tidak memiliki izin untuk memperbarui status insiden.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await axios.put(
+        `${API_URL}/api/insiden/${id}`,
+        { status: newStatus },
+        { headers: { "x-user-role": user.role } },
+      )
+
+      if (response.status === 200) {
+        toast({
+          title: "Sukses",
+          description: "Status insiden berhasil diperbarui.",
+        })
+        fetchData()
+      } else {
+        throw new Error("Failed to update incident status")
+      }
+    } catch (error) {
+      console.error("Error updating incident status:", error)
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui status insiden.",
+        variant: "destructive",
+      })
+    }
+  }
+
   const filteredData = garbageData.filter(
     (record) =>
       record.namaPemilik.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -345,29 +386,33 @@ export default function DashboardMain() {
     }
   }
 
-  const chartData = garbageData.map((record) => ({
-    date: new Date(record.waktu).toLocaleDateString(),
-    weight: record.berat,
+  const chartData = garbageData
+  .map((record) => ({
+    date: new Date(record.waktu).toISOString().split("T")[0],
+    weight: Number(record.berat),
   }))
+  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Urutkan data
 
-  const wasteComposition = wasteTypes.map((type) => ({
-    name: type,
-    value: garbageData.filter((record) => record.jenisSampah === type).reduce((sum, record) => sum + record.berat, 0),
-  }))
 
-  const locationPerformance = Array.from(new Set(garbageData.map((record) => `RT ${record.rt} RW ${record.rw}`))).map(
-    (location) => ({
+  const wasteComposition = wasteTypes
+    .map((type) => ({
+      name: type,
+      value: garbageData
+      .filter((record) => record.jenisSampah === type)
+      .reduce((sum, record) => sum + (isNaN(record.berat) ? 0 : Number(record.berat)), 0),
+        }))
+    .filter((item) => item.value > 0) // Only include categories with data
+
+    const locationPerformance = Array.from(new Set(garbageData.map((record) => `RT ${record.rt} RW ${record.rw}`)))
+    .map((location) => ({
       name: location,
       "Total Sampah": garbageData
         .filter((record) => `RT ${record.rt} RW ${record.rw}` === location)
-        .reduce((sum, record) => sum + record.berat, 0),
-    }),
-  )
+        .reduce((sum, record) => sum + Number(record.berat), 0), // Pastikan berat adalah number
+    }))
+    .sort((a, b) => b["Total Sampah"] - a["Total Sampah"]); // Urutkan dari terbesar ke terkecil
+  
 
-  const handleLogout = () => {
-    logout()
-    router.push("/login")
-  }
 
   if (loading) {
     return <div>Loading...</div>
@@ -384,7 +429,6 @@ export default function DashboardMain() {
           <h1 className="text-4xl font-bold text-green-800">
             Selamat datang, {user.name} ({user.role})
           </h1>
-          <Button onClick={handleLogout}>Logout</Button>
         </div>
       )}
       {desaInfo && (
@@ -419,7 +463,11 @@ export default function DashboardMain() {
           <TabsTrigger value="collection">Pengumpulan Sampah</TabsTrigger>
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
           <TabsTrigger value="gamification">Gamifikasi</TabsTrigger>
-          <TabsTrigger value="incidents">Insiden</TabsTrigger>
+          {user?.role === "WARGA" ? (
+            <TabsTrigger value="news">Berita</TabsTrigger>
+          ) : (
+            <TabsTrigger value="incidents">Insiden</TabsTrigger>
+          )}
         </TabsList>
         <TabsContent value="collection">
           <Card>
@@ -619,11 +667,26 @@ export default function DashboardMain() {
               </CardHeader>
               <CardContent>
                 <div className="h-[400px]">
-                  <DonutChart
+                  <PieChart
                     data={wasteComposition}
+                    category="value"
+                    index="name"
                     valueFormatter={(value) => `${value.toFixed(2)} kg`}
-                    colors={["#FF0000", "#FFA500", "#32CD32", "#1E90FF", "#000000"]}
+                    colors={["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"]}
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  {wasteComposition.map((item, index) => (
+                    <div key={index} className="flex items-center">
+                      <div
+                        className="w-4 h-4 rounded-full mr-2"
+                        style={{ backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"][index] }}
+                      ></div>
+                      <span>
+                        {item.name}: {typeof item.value === "number" ? item.value.toFixed(2) : "-"} kg
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -633,17 +696,17 @@ export default function DashboardMain() {
                 <CardTitle>Performa Pengumpulan per Lokasi</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[400px]">
-                  <BarChart
-                    data={locationPerformance}
-                    index="name"
-                    categories={["Total Sampah"]}
-                    colors={["teal"]}
-                    valueFormatter={(value) => `${(Number(value) || 0).toFixed(2)} kg`}
-                    yAxisWidth={48}
-                  />
-                </div>
-              </CardContent>
+              <div className="h-[400px]">
+                <BarChart
+                  data={locationPerformance}
+                  index="name"
+                  categories={["Total Sampah"]}
+                  colors={["teal"]}
+                  valueFormatter={(value) => `${(Number(value) || 0).toFixed(2)} kg`}
+                  yAxisWidth={48}
+                />
+              </div>
+            </CardContent>
             </Card>
 
             <Card>
@@ -721,111 +784,157 @@ export default function DashboardMain() {
         </TabsContent>
 
         <TabsContent value="incidents">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Laporan Insiden</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Jenis</TableHead>
-                      <TableHead>Lokasi</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Dilaporkan Pada</TableHead>
-                      <TableHead>Aksi</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {incidents.map((incident) => (
-                      <TableRow key={incident.id}>
-                        <TableCell>{incident.type}</TableCell>
-                        <TableCell>{incident.location}</TableCell>
-                        <TableCell>
-                          <Badge variant={incident.status === "Pending" ? "destructive" : "outline"}>
-                            {incident.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(incident.time).toLocaleString("id-ID")}</TableCell>
-                        <TableCell>
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button variant="outline" size="sm">
-                                Lihat Detail
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[425px]">
-                              <DialogHeader>
-                                <DialogTitle>Detail Insiden</DialogTitle>
-                                <DialogDescription>
-                                  Informasi lengkap mengenai insiden yang dilaporkan.
-                                </DialogDescription>
-                              </DialogHeader>
-                              <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <label className="text-right font-medium">Jenis</label>
-                                  <div className="col-span-3">{incident.type}</div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <label className="text-right font-medium">Lokasi</label>
-                                  <div className="col-span-3">{incident.location}</div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <label className="text-right font-medium">Status</label>
-                                  <div className="col-span-3">
-                                    <Badge variant={incident.status === "Pending" ? "destructive" : "outline"}>
-                                      {incident.status}
-                                    </Badge>
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <label className="text-right font-medium">Deskripsi</label>
-                                  <div className="col-span-3">{incident.description}</div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <label className="text-right font-medium">Pelapor</label>
-                                  <div className="col-span-3">{incident.reporter_id}</div>
-                                </div>
-                                {incident.handled_by && (
+          {user?.role !== "WARGA" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Laporan Insiden</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Jenis</TableHead>
+                        <TableHead>Lokasi</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Dilaporkan Pada</TableHead>
+                        <TableHead>Aksi</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {incidents.map((incident) => (
+                        <TableRow key={incident.id}>
+                          <TableCell>{incident.type}</TableCell>
+                          <TableCell>{incident.location}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                incident.status === "MENUNGGU"
+                                  ? "destructive"
+                                  : incident.status === "SEDANG_DITANGANI"
+                                    ? "secondary"
+                                    : "outline"
+                              }
+                            >
+                              {incident.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{new Date(incident.time).toLocaleString("id-ID")}</TableCell>
+                          <TableCell>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  Lihat Detail
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="sm:max-w-[425px]">
+                                <DialogHeader>
+                                  <DialogTitle>Detail Insiden</DialogTitle>
+                                  <DialogDescription>
+                                    Informasi lengkap mengenai insiden yang dilaporkan.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <label className="text-right font-medium">Ditangani Oleh</label>
-                                    <div className="col-span-3">{incident.handled_by}</div>
+                                    <label className="text-right font-medium">Jenis</label>
+                                    <div className="col-span-3">{incident.type}</div>
                                   </div>
-                                )}
-                                {incident.time_handled && (
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <label className="text-right font-medium">Waktu Penanganan</label>
+                                    <label className="text-right font-medium">Lokasi</label>
+                                    <div className="col-span-3">{incident.location}</div>
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <label className="text-right font-medium">Status</label>
                                     <div className="col-span-3">
-                                      {new Date(incident.time_handled).toLocaleString("id-ID")}
+                                      <Badge
+                                        variant={
+                                          incident.status === "MENUNGGU"
+                                            ? "destructive"
+                                            : incident.status === "SEDANG_DITANGANI"
+                                              ? "secondary"
+                                              : "outline"
+                                        }
+                                      >
+                                        {incident.status}
+                                      </Badge>
                                     </div>
                                   </div>
-                                )}
-                              </div>
-                              <DialogFooter>
-                                <Button type="submit">Tutup</Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <label className="text-right font-medium">Deskripsi</label>
+                                    <div className="col-span-3">{incident.description}</div>
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <label className="text-right font-medium">Pelapor</label>
+                                    <div className="col-span-3">{incident.reporter_id}</div>
+                                  </div>
+                                  {incident.handled_by && (
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                      <label className="text-right font-medium">Ditangani Oleh</label>
+                                      <div className="col-span-3">{incident.handled_by}</div>
+                                    </div>
+                                  )}
+                                  {incident.time_handled && (
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                      <label className="text-right font-medium">Waktu Penanganan</label>
+                                      <div className="col-span-3">
+                                        {new Date(incident.time_handled).toLocaleString("id-ID")}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <DialogFooter>
+                                  {user?.role === "ADMIN" && incident.status === "SEDANG_DITANGANI" && (
+                                    <Button onClick={() => updateIncidentStatus(incident.id, "SELESAI")}>
+                                      Tandai Selesai
+                                    </Button>
+                                  )}
+                                  {user?.role === "SUPERADMIN" && (
+                                    <Select
+                                      onValueChange={(value) =>
+                                        updateIncidentStatus(
+                                          incident.id,
+                                          value as "MENUNGGU" | "SEDANG_DITANGANI" | "SELESAI",
+                                        )
+                                      }
+                                      defaultValue={incident.status}
+                                    >
+                                      <SelectTrigger className="w-[180px]">
+                                        <SelectValue placeholder="Pilih status" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="MENUNGGU">Menunggu</SelectItem>
+                                        <SelectItem value="SEDANG_DITANGANI">Sedang Ditangani</SelectItem>
+                                        <SelectItem value="SELESAI">Selesai</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
 
-            {user?.role !== "WARGA" && <IncidentForm onSubmit={fetchData} />}
+              <IncidentForm onSubmit={fetchData} />
 
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Ringkasan Insiden</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SimplifiedMap incidents={incidents} />
-              </CardContent>
-            </Card>
-          </div>
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle>Ringkasan Insiden</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SimplifiedMap incidents={incidents} />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="news">
+          <NewsSection />
         </TabsContent>
       </Tabs>
 
@@ -876,13 +985,11 @@ function CollectionSchedule() {
       if (!user) return
 
       try {
-        // ✅ Tentukan URL berdasarkan role user
         const url =
           user.role === "SUPERADMIN"
             ? `${API_URL}/api/jadwal-pengumpulan`
             : `${API_URL}/api/jadwal-pengumpulan?desaId=${user.desaId}`
 
-        // ✅ Tambahkan Header `x-user-role`
         const response = await axios.get(url, {
           headers: { "x-user-role": user.role },
         })
@@ -1038,7 +1145,7 @@ function CollectionScheduleForm({ user }: { user: { desaId: string; role: string
         {
           headers: {
             "Content-Type": "application/json",
-            "x-user-role": user.role, // Tambahkan header x-user-role
+            "x-user-role": user.role,
           },
         },
       )
