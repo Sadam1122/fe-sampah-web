@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { FaRobot } from "react-icons/fa";
+import { TrendingUp, Sparkles, Recycle, MapPin, Trophy, Lightbulb } from "lucide-react";
 
 // Type definitions for the props
 interface WawasanAIProps {
@@ -17,15 +17,21 @@ interface WawasanAIProps {
   }>;
 }
 
+interface Insight {
+  text: string;
+  values: Record<string, any>;
+  color: string;
+}
+
 // Fuzzy Logic for dynamic analysis
 const fuzzyIncreasePrediction = (lastMonthWaste: number, currentMonthWaste: number): string => {
   const ratio = currentMonthWaste / lastMonthWaste;
 
-  if (ratio >= 1.2) return "Peningkatan Signifikan"; // Peningkatan lebih dari 20% (rasio 1.20 atau lebih)
-  if (ratio >= 1.05 && ratio < 1.2) return "Peningkatan Moderat"; // Peningkatan antara 5% hingga 20% (rasio 1.05 sampai 1.19)
-  if (ratio <= 0.8) return "Penurunan Signifikan"; // Penurunan lebih dari 20% (rasio 0.80 atau kurang)
-  if (ratio <= 0.95 && ratio > 0.8) return "Penurunan Moderat"; // Penurunan antara 5% hingga 20% (rasio 0.81 sampai 0.95)
-  return "Stabil"; // Rasio antara 0.95 hingga 1.05, perubahan kurang dari 5%
+  if (ratio >= 1.2) return "Peningkatan Signifikan";
+  if (ratio >= 1.05 && ratio < 1.2) return "Peningkatan Moderat";
+  if (ratio <= 0.8) return "Penurunan Signifikan";
+  if (ratio <= 0.95 && ratio > 0.8) return "Penurunan Moderat";
+  return "Stabil";
 };
 
 const fuzzySeasonalWastePrediction = (monthlyData: number[]): string => {
@@ -51,36 +57,49 @@ const fuzzyFuelSavings = (rtVolumes: Record<string, number>): string => {
 
   const volumeRatio = highVolumeRT[1] / totalVolume;
 
-  if (volumeRatio >= 0 && volumeRatio <= 0.3) return "Merata"; // Jika rasio berada antara 0 dan 0.3
-  if (volumeRatio > 0.3 && volumeRatio <= 0.5) return "Kurang Merata"; // Rentang lebih dari 0.3 hingga 0.5
+  if (volumeRatio >= 0 && volumeRatio <= 0.3) return "Merata";
+  if (volumeRatio > 0.3 && volumeRatio <= 0.5) return "Kurang Merata";
   return "Tidak Rata";
 };
 
 const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) => {
   const [monthlyData, setMonthlyData] = useState<number[]>([]);
+  const [insights, setInsights] = useState<Insight[]>([]);
 
   useEffect(() => {
-    // Collecting monthly data for seasonal prediction
-    const lastSixMonthsWaste = Array(6)
-      .fill(0)
-      .map((_, idx) => {
-        const monthData = garbageData.filter(
-          (record) =>
-            new Date(record.waktu).getMonth() === new Date().getMonth() - idx
+    const lastSixMonthsWaste = Array.from({ length: 6 }, (_, idx) => {
+      const targetDate = new Date();
+      targetDate.setMonth(targetDate.getMonth() - idx);
+  
+      const monthData = garbageData.filter((record) => {
+        const recordDate = new Date(record.waktu);
+        return (
+          recordDate.getMonth() === targetDate.getMonth() &&
+          recordDate.getFullYear() === targetDate.getFullYear()
         );
-        return monthData.reduce((sum, record) => sum + record.berat, 0);
       });
+  
+      return monthData.reduce((sum, record) => sum + Number(record.berat), 0);
+    }).reverse();
+  
     setMonthlyData(lastSixMonthsWaste);
   }, [garbageData]);
 
-  const getInsights = () => {
-    const totalWaste = garbageData.reduce((sum, record) => sum + record.berat, 0);
-
+  useEffect(() => {
     const currentDate = new Date();
-    const currentMonth = currentDate.getMonth(); // Bulan sekarang (0-11)
-    const currentYear = currentDate.getFullYear(); // Tahun sekarang
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
 
-    // Mencari sampah bulan ini
+    const lastMonthWaste = garbageData
+      .filter((record) => {
+        const recordDate = new Date(record.waktu);
+        return (
+          recordDate.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
+          recordDate.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear)
+        );
+      })
+      .reduce((sum, record) => sum + Number(record.berat), 0);
+    
     const currentMonthWaste = garbageData
       .filter((record) => {
         const recordDate = new Date(record.waktu);
@@ -89,27 +108,16 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
           recordDate.getFullYear() === currentYear
         );
       })
-      .reduce((sum, record) => sum + record.berat, 0);
+      .reduce((sum, record) => sum + Number(record.berat), 0);
 
-    // Mencari sampah bulan lalu
-    const lastMonthWaste = garbageData
-      .filter((record) => {
-        const recordDate = new Date(record.waktu);
-        return (
-          recordDate.getMonth() === currentMonth - 1 || 
-          (currentMonth === 0 && recordDate.getMonth() === 11) // Mengatasi bulan Desember
-        ) &&
-        recordDate.getFullYear() === currentYear;
-      })
-      .reduce((sum, record) => sum + record.berat, 0);
-
-    // Prediksi peningkatan
     const predictedIncrease = fuzzyIncreasePrediction(lastMonthWaste, currentMonthWaste);
-
     const seasonalPrediction = fuzzySeasonalWastePrediction(monthlyData);
-
+    
     const rtVolumes = garbageData.reduce((acc, record) => {
-      acc[record.rt] = (acc[record.rt] || 0) + record.berat;
+      const berat = parseFloat(String(record.berat));
+      if (!isNaN(berat)) {
+        acc[record.rt] = (acc[record.rt] || 0) + berat;
+      }
       return acc;
     }, {} as Record<string, number>);
 
@@ -118,94 +126,111 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
     const plasticWaste = garbageData.filter(
       (record) => record.jenisSampah === "Plastik"
     );
-    const plasticRecyclingRate = (plasticWaste.length / garbageData.length) * 100;
 
+    const plasticRecyclingRate = (plasticWaste.length / garbageData.length) * 100;
     const recyclingStatus = fuzzyPlasticRecycling(plasticRecyclingRate);
 
     const topCollector = users.reduce(
-      (max, user) => (max.totalPoin > user.totalPoin ? max : user)
+      (max, user) => (max.totalPoin > user.totalPoin ? max : user),
+      users[0]
     );
 
-    return [
+    const newInsights: Insight[] = [
       {
-        text: `Prediksi peningkatan sampah: ${predictedIncrease}.`,
+        text: `Prediksi peningkatan sampah: ${predictedIncrease}`,
         values: {
           "Sampah Bulan Lalu (kg)": lastMonthWaste,
           "Sampah Bulan Ini (kg)": currentMonthWaste,
-          "Rasio": (currentMonthWaste / lastMonthWaste).toFixed(2),
+          "Rasio": lastMonthWaste > 0 ? (currentMonthWaste / lastMonthWaste).toFixed(2) : "N/A",
         },
-        color:
-          predictedIncrease === "Peningkatan Signifikan"
-            ? "text-red-500"
-            : predictedIncrease === "Stabil"
-            ? "text-yellow-500"
-            : "text-green-500",
+        color: predictedIncrease === "Peningkatan Signifikan"
+          ? "border-l-4 border-red-500"
+          : predictedIncrease === "Stabil"
+          ? "border-l-4 border-yellow-500"
+          : "border-l-4 border-green-500",
       },
       {
-        text: `Analisis tren sampah musiman: ${seasonalPrediction}.`,
+        text: `Analisis tren sampah musiman: ${seasonalPrediction}`,
         values: { "Data Bulanan (kg)": monthlyData },
-        color:
-          seasonalPrediction === "Peningkatan Musiman Signifikan"
-            ? "text-red-500"
-            : seasonalPrediction === "Pola Musiman Stabil"
-            ? "text-yellow-500"
-            : "text-green-500",
+        color: seasonalPrediction === "Peningkatan Musiman Signifikan"
+          ? "border-l-4 border-red-500"
+          : seasonalPrediction === "Pola Musiman Stabil"
+          ? "border-l-4 border-yellow-500"
+          : "border-l-4 border-green-500",
       },
       {
-        text: `Tingkat daur ulang sampah plastik berada pada kategori: ${recyclingStatus}.`,
+        text: `Tingkat daur ulang sampah plastik berada pada kategori: ${recyclingStatus}`,
         values: { "Tingkat Daur Ulang (%)": plasticRecyclingRate.toFixed(2) },
-        color:
-          recyclingStatus === "Tinggi"
-            ? "text-green-500"
-            : recyclingStatus === "Sedang"
-            ? "text-yellow-500"
-            : "text-red-500",
+        color: recyclingStatus === "Tinggi"
+          ? "border-l-4 border-green-500"
+          : recyclingStatus === "Sedang"
+          ? "border-l-4 border-yellow-500"
+          : "border-l-4 border-red-500",
       },
       {
-        text: `Analisis pola menunjukkan jumlah sampah setiap lokasi: ${fuelSavings}.`,
+        text: `Analisis pola menunjukkan jumlah sampah setiap lokasi: ${fuelSavings}`,
         values: { "Volume Sampah RT": rtVolumes },
-        color:
-          fuelSavings === "Merata"
-            ? "text-green-500"
-            : fuelSavings === "Kurang Merata"
-            ? "text-yellow-500"
-            : "text-red-500",
+        color: fuelSavings === "Merata"
+          ? "border-l-4 border-green-500"
+          : fuelSavings === "Kurang Merata"
+          ? "border-l-4 border-yellow-500"
+          : "border-l-4 border-red-500",
       },
       {
-        text: `Rekomendasi: Tingkatkan pengumpulan di RT ${Object.entries(rtVolumes).sort(
-          (a, b) => b[1] - a[1]
-        )[0][0]}.`,
+        text: `Rekomendasi: Tingkatkan pengumpulan di RT ${
+          Object.entries(rtVolumes).sort((a, b) => b[1] - a[1])[0]?.[0] || "-"
+        }`,
         values: {},
-        color: "text-black",
+        color: "border-l-4 border-blue-500",
       },
       {
-        text: `${topCollector.namaPemilik} adalah pengumpul terbaik dengan ${topCollector.totalPoin} poin.`,
+        text: `${topCollector?.namaPemilik || "-"} adalah pengumpul terbaik dengan ${
+          topCollector?.totalPoin || 0
+        } poin`,
         values: {},
-        color: "text-black",
+        color: "border-l-4 border-purple-500",
       },
     ];
-  };
+
+    setInsights(newInsights);
+  }, [garbageData, users, monthlyData]);
 
   return (
-    <Card className="border rounded-lg shadow-lg bg-white">
-      <CardContent className="p-4">
-        <ul className="space-y-4">
-          {getInsights().map((insight, index) => (
-            <li key={index} className="flex flex-col space-y-2">
-              <div className="flex items-center space-x-2">
-                <FaRobot className="text-green-400" />
-                <span className={`${insight.color} font-bold`}>{insight.text}</span>
+    <Card className="border border-gray-200 rounded-2xl shadow-xl bg-gradient-to-br from-white to-gray-100 p-6">
+      <CardContent>
+        <ul className="space-y-6">
+          {insights.map((insight, index) => (
+            <li
+              key={index}
+              className={`p-4 rounded-xl bg-white shadow-md flex items-start space-x-4 transition-transform transform hover:scale-105 hover:shadow-lg ${insight.color}`}
+            >
+              <div className="p-3 bg-gray-100 rounded-lg">
+                {index === 0 && <TrendingUp className="text-red-500" />}
+                {index === 1 && <Sparkles className="text-yellow-500" />}
+                {index === 2 && <Recycle className="text-green-500" />}
+                {index === 3 && <MapPin className="text-blue-500" />}
+                {index === 4 && <Lightbulb  className="text-purple-500" />}
+                {index === 5 && <Trophy className="text-purple-500" />}
               </div>
-              {Object.keys(insight.values).length > 0 && (
-                <ul className="ml-6 text-sm text-gray-600">
-                  {Object.entries(insight.values).map(([key, value], idx) => (
-                    <li key={idx}>
-                      <span className="font-medium">{key}:</span>{" "}
-                      {typeof value === "object" ? JSON.stringify(value) : value}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div>
+                <p className="text-lg font-semibold text-gray-800">{insight.text}</p>
+                {Object.keys(insight.values).length > 0 && (
+                  <ul className="mt-2 text-sm text-gray-600">
+                    {Object.entries(insight.values).map(([key, value], idx) => (
+                      <li key={idx} className="flex justify-between">
+                        <span className="font-medium">{key}:</span>
+                        <span>
+                          {value !== undefined
+                            ? typeof value === "object"
+                              ? JSON.stringify(value)
+                              : String(value)
+                            : "-"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </li>
           ))}
         </ul>
