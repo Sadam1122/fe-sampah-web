@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { FaTrash, FaRecycle, FaMapMarkerAlt, FaCalendarAlt, FaSearch, FaLeaf, FaTrophy } from "react-icons/fa"
+import { FaTrash, FaRecycle, FaMapMarkerAlt, FaCalendarAlt, FaSearch } from "react-icons/fa"
 import { motion } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -24,7 +24,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { LineChart, BarChart, PieChart } from "@/components/ui/charts"
 import { IncidentForm } from "./IncidentForm"
-import { RankingList } from "./RankingList"
 import { SimplifiedMap } from "./SimplifiedMap"
 import WawasanAI from "./WawasanAI"
 import EditModal from "./EditModal"
@@ -32,6 +31,9 @@ import { useAuth } from "../hook/useAuth"
 import { NewsSection } from "./NewsSection"
 import axios from "axios"
 import type React from "react"
+import LeaderboardCard from "./LeaderboardCard"
+import AchievementsCard from "./AchievementsCard"
+import UserStatisticsCard from "./UserStatisticsCard"
 
 // Type definitions
 interface GarbageRecord {
@@ -57,7 +59,7 @@ interface Incident {
   id: string
   type: string
   location: string
-  status: "MENUNGGU" | "SEDANG_DITANGANI" | "SELESAI"
+  status: "PENDING" | "IN_PROGRESS" | "RESOLVED"
   time: string
   description: string
   reporter_id: string
@@ -119,9 +121,6 @@ export default function DashboardMain() {
     }
   }, [user, loading, router])
 
-
-
-
   const fetchDesaInfo = async (desaId: string) => {
     if (!user || user.role === "SUPERADMIN") return
 
@@ -139,10 +138,10 @@ export default function DashboardMain() {
   }
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
-  
-    setIsLoading(true);
-    setError(null);
+    if (!user) return
+
+    setIsLoading(true)
+    setError(null)
     try {
       const requests = [
         axios.get(`${API_URL}/api/pengumpulan-sampah?desaId=${user.desaId}`, {
@@ -151,61 +150,62 @@ export default function DashboardMain() {
         axios.get(`${API_URL}/api/leaderboard?desaId=${user.desaId}`, {
           headers: { "x-user-role": user.role },
         }),
-      ];
-  
+      ]
+
       // Perbaikan perbandingan role
       if (user.role !== "WARGA") {
         requests.push(
           axios.get(`${API_URL}/api/insiden?desaId=${user.desaId}`, {
             headers: { "x-user-role": user.role },
-          })
-        );
+          }),
+        )
       }
-  
-      const responses = await Promise.all(requests);
-  
-      const [garbageResponse, leaderboardResponse, incidentResponse] = responses;
-  
-      setGarbageData(garbageResponse.data || []);
+
+      const responses = await Promise.all(requests)
+
+      const [garbageResponse, leaderboardResponse, incidentResponse] = responses
+
+      setGarbageData(garbageResponse.data || [])
       const total = garbageResponse.data.reduce(
         (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
-        0
-      );
-      setTotalWeight(total);
-  
-      const locations = new Set(garbageResponse.data.map((record: GarbageRecord) => `${record.rt}-${record.rw}`));
-      setUniqueLocations(locations.size);
-  
+        0,
+      )
+      setTotalWeight(total)
+
+      const locations = new Set(garbageResponse.data.map((record: GarbageRecord) => `${record.rt}-${record.rw}`))
+      setUniqueLocations(locations.size)
+
       const recyclableWaste = garbageResponse.data.filter((record: GarbageRecord) =>
-        ["Plastik", "Kertas", "Kaca"].includes(record.jenisSampah)
-      );
+        ["Plastik", "Kertas", "Kaca"].includes(record.jenisSampah),
+      )
       const recyclableWeight = recyclableWaste.reduce(
         (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
-        0
-      );
-  
-      const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0;
-      setRecyclingRate(recyclingRate);
-  
-      setLeaderboard(leaderboardResponse.data || []);
-  
+        0,
+      )
+
+      const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0
+      setRecyclingRate(recyclingRate)
+
+      setLeaderboard(leaderboardResponse.data || [])
+
       if (user.role !== "WARGA" && incidentResponse) {
-        setIncidents(incidentResponse.data || []);
+        setIncidents(incidentResponse.data || [])
       }
     } catch (error) {
-      console.error("Error fetching data:", error);
-      setError("Gagal mengambil data. Silakan coba lagi nanti.");
+      console.error("Error fetching data:", error)
+      setError("Gagal mengambil data. Silakan coba lagi nanti.")
       toast({
         title: "Error",
         description: "Gagal mengambil data. Silakan coba lagi nanti.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  }, [user, toast]);
-  
+  }, [user, toast])
 
+
+  
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setNewRecord((prev) => ({ ...prev, [name]: value }))
@@ -334,29 +334,45 @@ export default function DashboardMain() {
     }
   }
 
-  const updateIncidentStatus = async (id: string, newStatus: "MENUNGGU" | "SEDANG_DITANGANI" | "SELESAI") => {
-    if (!user || (user.role !== "ADMIN" && user.role !== "SUPERADMIN")) {
+  const updateIncidentStatus = async (id: string, newStatus: "PENDING" | "IN_PROGRESS" | "RESOLVED") => {
+    if (!user) {
       toast({
         title: "Error",
-        description: "Anda tidak memiliki izin untuk memperbarui status insiden.",
+        description: "Anda harus login untuk memperbarui status insiden.",
         variant: "destructive",
       })
       return
     }
-
+  
+    const isSuperAdmin = user.role === "SUPERADMIN"
+    const isAdmin = user.role === "ADMIN"
+  
+    // Cek izin perubahan status
+    if (
+      (!isSuperAdmin && !isAdmin) || // Jika bukan ADMIN/SUPERADMIN
+      (isAdmin && newStatus !== "RESOLVED") // ADMIN hanya bisa ubah ke RESOLVED
+    ) {
+      toast({
+        title: "Error",
+        description: "Anda tidak memiliki izin untuk memperbarui status insiden ini.",
+        variant: "destructive",
+      })
+      return
+    }
+  
     try {
       const response = await axios.put(
-        `${API_URL}/api/insiden/${id}`,
-        { status: newStatus },
-        { headers: { "x-user-role": user.role } },
+        `${API_URL}/api/insiden`, // PUT ke endpoint utama tanpa ID di URL
+        { id, status: newStatus }, // Body request sesuai format
+        { headers: { "x-user-role": user.role } } // Tambahkan header otorisasi
       )
-
+  
       if (response.status === 200) {
         toast({
           title: "Sukses",
-          description: "Status insiden berhasil diperbarui.",
+          description: `Status insiden berhasil diperbarui menjadi ${newStatus}.`,
         })
-        fetchData()
+        fetchData() // Refresh data setelah update
       } else {
         throw new Error("Failed to update incident status")
       }
@@ -369,7 +385,8 @@ export default function DashboardMain() {
       })
     }
   }
-
+  
+  
   const filteredData = garbageData.filter(
     (record) =>
       record.namaPemilik.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -387,32 +404,29 @@ export default function DashboardMain() {
   }
 
   const chartData = garbageData
-  .map((record) => ({
-    date: new Date(record.waktu).toISOString().split("T")[0],
-    weight: Number(record.berat),
-  }))
-  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Urutkan data
-
+    .map((record) => ({
+      date: new Date(record.waktu).toISOString().split("T")[0],
+      weight: Number(record.berat),
+    }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) // Urutkan data
 
   const wasteComposition = wasteTypes
     .map((type) => ({
       name: type,
       value: garbageData
-      .filter((record) => record.jenisSampah === type)
-      .reduce((sum, record) => sum + (isNaN(record.berat) ? 0 : Number(record.berat)), 0),
-        }))
+        .filter((record) => record.jenisSampah === type)
+        .reduce((sum, record) => sum + (isNaN(record.berat) ? 0 : Number(record.berat)), 0),
+    }))
     .filter((item) => item.value > 0) // Only include categories with data
 
-    const locationPerformance = Array.from(new Set(garbageData.map((record) => `RT ${record.rt} RW ${record.rw}`)))
+  const locationPerformance = Array.from(new Set(garbageData.map((record) => `RT ${record.rt} RW ${record.rw}`)))
     .map((location) => ({
       name: location,
       "Total Sampah": garbageData
         .filter((record) => `RT ${record.rt} RW ${record.rw}` === location)
         .reduce((sum, record) => sum + Number(record.berat), 0), // Pastikan berat adalah number
     }))
-    .sort((a, b) => b["Total Sampah"] - a["Total Sampah"]); // Urutkan dari terbesar ke terkecil
-  
-
+    .sort((a, b) => b["Total Sampah"] - a["Total Sampah"]) // Urutkan dari terbesar ke terkecil
 
   if (loading) {
     return <div>Loading...</div>
@@ -442,19 +456,19 @@ export default function DashboardMain() {
           icon={<FaTrash />}
           title="Total Sampah Terkumpul"
           value={`${(Number.parseFloat(totalWeight as unknown as string) || 0).toFixed(2)} kg`}
-          color="from-green-400 to-green-600"
+          color="bg-gradient-to-r from-green-500 to-green-700 shadow-lg"
         />
         <DashboardCard
           icon={<FaRecycle />}
           title="Tingkat Daur Ulang"
           value={`${(Number(recyclingRate) || 0).toFixed(2)}%`}
-          color="from-teal-400 to-teal-600"
+          color="bg-gradient-to-r from-teal-500 to-teal-700 shadow-lg"
         />
         <DashboardCard
           icon={<FaMapMarkerAlt />}
           title="Titik Pengumpulan Unik"
           value={uniqueLocations.toString()}
-          color="from-emerald-400 to-emerald-600"
+          color="bg-gradient-to-r from-emerald-500 to-emerald-700 shadow-lg"
         />
       </div>
 
@@ -696,17 +710,17 @@ export default function DashboardMain() {
                 <CardTitle>Performa Pengumpulan per Lokasi</CardTitle>
               </CardHeader>
               <CardContent>
-              <div className="h-[400px]">
-                <BarChart
-                  data={locationPerformance}
-                  index="name"
-                  categories={["Total Sampah"]}
-                  colors={["teal"]}
-                  valueFormatter={(value) => `${(Number(value) || 0).toFixed(2)} kg`}
-                  yAxisWidth={48}
-                />
-              </div>
-            </CardContent>
+                <div className="h-[400px]">
+                  <BarChart
+                    data={locationPerformance}
+                    index="name"
+                    categories={["Total Sampah"]}
+                    colors={["teal"]}
+                    valueFormatter={(value) => `${(Number(value) || 0).toFixed(2)} kg`}
+                    yAxisWidth={48}
+                  />
+                </div>
+              </CardContent>
             </Card>
 
             <Card>
@@ -723,63 +737,10 @@ export default function DashboardMain() {
         </TabsContent>
 
         <TabsContent value="gamification">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <RankingList users={leaderboard} />
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Pencapaian</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Achievement
-                    title="Pemula Daur Ulang"
-                    description="Daur ulang item pertama Anda"
-                    icon={<FaRecycle />}
-                    progress={100}
-                  />
-                  <Achievement
-                    title="Pejuang Sampah"
-                    description="Kumpulkan 100kg sampah"
-                    icon={<FaTrash />}
-                    progress={75}
-                  />
-                  <Achievement
-                    title="Pelindung Lingkungan"
-                    description="Pertahankan tingkat daur ulang 90% selama sebulan"
-                    icon={<FaLeaf />}
-                    progress={50}
-                  />
-                  <Achievement
-                    title="Penggiat Komunitas"
-                    description="Ajak 5 teman untuk bergabung"
-                    icon={<FaTrophy />}
-                    progress={20}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Statistik Pengguna</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[400px]">
-                  <BarChart
-                    data={leaderboard.map((user) => ({
-                      name: user.namaPemilik,
-                      "Total Poin": user.totalPoin,
-                    }))}
-                    index="name"
-                    categories={["Total Poin"]}
-                    colors={["violet"]}
-                    valueFormatter={(value) => `${value} poin`}
-                    yAxisWidth={48}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 gap-6">
+            <LeaderboardCard users={leaderboard} />
+            <AchievementsCard />
+            <UserStatisticsCard leaderboard={leaderboard} />
           </div>
         </TabsContent>
 
@@ -809,9 +770,9 @@ export default function DashboardMain() {
                           <TableCell>
                             <Badge
                               variant={
-                                incident.status === "MENUNGGU"
+                                incident.status === "PENDING"
                                   ? "destructive"
-                                  : incident.status === "SEDANG_DITANGANI"
+                                  : incident.status === "IN_PROGRESS"
                                     ? "secondary"
                                     : "outline"
                               }
@@ -848,9 +809,9 @@ export default function DashboardMain() {
                                     <div className="col-span-3">
                                       <Badge
                                         variant={
-                                          incident.status === "MENUNGGU"
+                                          incident.status === "PENDING"
                                             ? "destructive"
-                                            : incident.status === "SEDANG_DITANGANI"
+                                            : incident.status === "IN_PROGRESS"
                                               ? "secondary"
                                               : "outline"
                                         }
@@ -883,8 +844,8 @@ export default function DashboardMain() {
                                   )}
                                 </div>
                                 <DialogFooter>
-                                  {user?.role === "ADMIN" && incident.status === "SEDANG_DITANGANI" && (
-                                    <Button onClick={() => updateIncidentStatus(incident.id, "SELESAI")}>
+                                  {user?.role === "ADMIN" && incident.status === "IN_PROGRESS" && (
+                                    <Button onClick={() => updateIncidentStatus(incident.id, "RESOLVED")}>
                                       Tandai Selesai
                                     </Button>
                                   )}
@@ -893,7 +854,7 @@ export default function DashboardMain() {
                                       onValueChange={(value) =>
                                         updateIncidentStatus(
                                           incident.id,
-                                          value as "MENUNGGU" | "SEDANG_DITANGANI" | "SELESAI",
+                                          value as "PENDING" | "IN_PROGRESS" | "RESOLVED",
                                         )
                                       }
                                       defaultValue={incident.status}
@@ -902,9 +863,9 @@ export default function DashboardMain() {
                                         <SelectValue placeholder="Pilih status" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="MENUNGGU">Menunggu</SelectItem>
-                                        <SelectItem value="SEDANG_DITANGANI">Sedang Ditangani</SelectItem>
-                                        <SelectItem value="SELESAI">Selesai</SelectItem>
+                                        <SelectItem value="PENDING">Menunggu</SelectItem>
+                                        <SelectItem value="IN_PROGRESS">Sedang Ditangani</SelectItem>
+                                        <SelectItem value="RESOLVED">Selesai</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   )}
@@ -959,7 +920,7 @@ function DashboardCard({
 }) {
   return (
     <motion.div
-      className={`bg-gradient-to-r ${color} rounded-lg shadow-md p-6 text-white`}
+      className={`bggradient-to-r ${color} rounded-lg shadow-md p-6 text-white`}
       whileHover={{ scale: 1.05 }}
       transition={{ type: "spring", stiffness: 300 }}
     >
@@ -985,11 +946,15 @@ function CollectionSchedule() {
       if (!user) return
 
       try {
-        const url =
-          user.role === "SUPERADMIN"
-            ? `${API_URL}/api/jadwal-pengumpulan`
-            : `${API_URL}/api/jadwal-pengumpulan?desaId=${user.desaId}`
+        // Periksa apakah user adalah SUPERADMIN
+        const isSuperAdmin = user.role?.toUpperCase() === "SUPERADMIN"
 
+        // SUPERADMIN langsung panggil API utama tanpa desaId
+        const url = isSuperAdmin
+          ? `${API_URL}/api/jadwal-pengumpulan`
+          : `${API_URL}/api/jadwal-pengumpulan?desaId=${user.desaId}`
+
+        // Panggil API
         const response = await axios.get(url, {
           headers: { "x-user-role": user.role },
         })
@@ -1005,9 +970,6 @@ function CollectionSchedule() {
 
     fetchSchedules()
   }, [user])
-
-  if (isLoading) return <div>Loading schedules...</div>
-  if (error) return <div>Error: {error}</div>
 
   return (
     <Card>
