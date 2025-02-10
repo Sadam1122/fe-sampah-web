@@ -5,17 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import Cookies from "js-cookie";
+import axios from "axios";
+import { useAuth } from "../hook/useAuth";
 
-interface UserData {
-  id: string;
-  username: string;
-  role: string;
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface IncidentData {
   id?: string;
-  desaId?: string;
+  desaId: string;
   type: string;
   location: string;
   description: string;
@@ -31,64 +28,69 @@ interface IncidentFormProps {
 }
 
 export function IncidentForm({ onSubmit }: IncidentFormProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
   const [incidentData, setIncidentData] = useState<IncidentData>({
+    desaId: user?.desaId || "",
     type: "",
     location: "",
     description: "",
     status: "PENDING",
     reporterId: "",
+    handledBy: "",
   });
 
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const { toast } = useToast();
-
-  // useEffect(() => {
-  //   const fetchUserData = async () => {
-  //     try {
-  //       const response = await fetch("/api/users", {
-  //         method: "GET",
-  //         headers: {
-  //           "Content-Type": "application/json",
-  //           "x-user-role": Cookies.get("role") || "", // Mengirimkan role sebagai header
-  //         },
-  //       });
-  
-  //       if (!response.ok) {
-  //         throw new Error(`Gagal mendapatkan data user: ${response.status} ${response.statusText}`);
-  //       }
-  
-  //       const data = await response.json();
-  //       setUserData(data as UserData);
-  //       setIncidentData((prev) => ({ ...prev, reporterId: data.id }));
-  
-  //     } catch (error) {
-  //       console.error("Error fetching user data:", error);
-  //       toast({ title: "Error", description: "Gagal mendapatkan data pengguna", variant: "destructive" });
-  //     }
-  //   };
-  
-  //   fetchUserData();
-  // }, []);
-  
-
+  useEffect(() => {
+    if (user?.desaId) {
+      setIncidentData((prev) => ({ ...prev, desaId: user.desaId }));
+    }
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     try {
-      const response = await fetch("/api/insiden", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(incidentData),
-      });
+      if (!user) {
+        throw new Error("User belum tersedia");
+      }
+      
+      const response = await axios.post(
+        `${API_URL}/api/insiden`,
+        {
+          ...incidentData,
+          handledBy: incidentData.reporterId,
+          timeHandled: new Date().toISOString(),
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-role": user.role,
+          },
+        }
+      );
 
-      if (!response.ok) throw new Error("Gagal mengirim laporan insiden");
-
+      if (response.status !== 201) throw new Error("Gagal mengirim laporan insiden");
+      
       toast({ title: "Success", description: "Laporan insiden berhasil dikirim" });
       await onSubmit(incidentData);
 
+      // Reset form setelah submit berhasil
+      setIncidentData({
+        desaId: user.desaId || "",
+        type: "",
+        location: "",
+        description: "",
+        status: "PENDING",
+        reporterId: "",
+        handledBy: "",
+      });
     } catch (error) {
       console.error("Error submitting incident:", error);
       toast({ title: "Error", description: "Gagal mengirim laporan insiden", variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -104,9 +106,10 @@ export function IncidentForm({ onSubmit }: IncidentFormProps) {
               <SelectValue placeholder="Pilih Jenis Insiden" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="illegal_dumping">Pembuangan Ilegal</SelectItem>
-              <SelectItem value="overflow">Tempat Sampah Penuh</SelectItem>
-              <SelectItem value="hazardous_waste">Sampah Berbahaya</SelectItem>
+              <SelectItem value="Pembuangan Ilegal">Pembuangan Ilegal</SelectItem>
+              <SelectItem value="Tempat Sampah Penuh">Tempat Sampah Penuh</SelectItem>
+              <SelectItem value="Sampah Berbahaya">Sampah Berbahaya</SelectItem>
+              <SelectItem value="Kebakaran">Kebakaran</SelectItem>
             </SelectContent>
           </Select>
           <Input
@@ -121,12 +124,15 @@ export function IncidentForm({ onSubmit }: IncidentFormProps) {
             onChange={(e) => setIncidentData((prev) => ({ ...prev, description: e.target.value }))}
             required
           />
-          {userData && (
-            <p className="text-sm text-gray-500">
-              Dilaporkan oleh: {userData.username} ({userData.role})
-            </p>
-          )}
-          <Button type="submit">Laporkan</Button>
+          <Input
+            placeholder="Nama Pelapor"
+            value={incidentData.reporterId}
+            onChange={(e) => setIncidentData((prev) => ({ ...prev, reporterId: e.target.value }))}
+            required
+          />
+          <Button type="submit" disabled={loading}>
+            {loading ? "Mengirim..." : "Laporkan"}
+          </Button>
         </form>
       </CardContent>
     </Card>

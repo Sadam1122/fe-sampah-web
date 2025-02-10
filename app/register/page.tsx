@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { ArrowLeft, Mail, User, Lock, Eye, EyeOff, UserPlus, Leaf } from "lucide-react"
 import Notification from "../component/Notification"
 import { motion } from "framer-motion"
+import { useAuth } from "../hook/useAuth";
 import type React from "react" // Added import for React
 
 interface UserData {
@@ -19,12 +20,13 @@ interface FormData {
   confirmPassword: string
   role: string
   createdById?: string
+  desaId: string;
 }
 
 const ROLE_CONFIGURATIONS: Record<string, string[]> = {
-  superadmin: ["STAFF", "ADMIN"],
-  admin: ["STAFF"],
-  staff: ["STAFF"],
+  superadmin: ["WARGA", "ADMIN"],
+  admin: ["WARGA"],
+  staff: ["WARGA"],
 }
 
 const validatePassword = (password: string): string[] => {
@@ -39,13 +41,21 @@ const validatePassword = (password: string): string[] => {
 
 
 export default function RegisterPage() {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<FormData>({
     email: "",
     username: "",
     password: "",
     confirmPassword: "",
     role: "",
+    desaId: user?.desaId || "",
   })
+ useEffect(() => {
+    if (user?.desaId) {
+      setFormData((prev) => ({ ...prev, desaId: user.desaId }));
+    }
+  }, [user]);
+
   const [currentUser, setCurrentUser] = useState<UserData | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -65,7 +75,7 @@ export default function RegisterPage() {
         }
 
         const user = JSON.parse(userJson) as UserData
-        const allowedRoles = ROLE_CONFIGURATIONS[user.role.toLowerCase()] || ["STAFF"]
+        const allowedRoles = ROLE_CONFIGURATIONS[user.role.toLowerCase()] || ["WARGA"]
 
         setAvailableRoles(allowedRoles)
         setFormData((prev) => ({ ...prev, role: allowedRoles[0] }))

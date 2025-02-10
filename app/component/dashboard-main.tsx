@@ -62,8 +62,8 @@ interface Incident {
   status: "PENDING" | "IN_PROGRESS" | "RESOLVED"
   time: string
   description: string
-  reporter_id: string
-  handled_by: string | null
+  reporterId: string
+  handled_By: string | null
   time_handled: string | null
 }
 
@@ -489,7 +489,7 @@ export default function DashboardMain() {
               <CardTitle>Daftar Pengumpulan Sampah</CardTitle>
             </CardHeader>
             <CardContent>
-              {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
+              {(user?.role === "ADMIN") && (
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
@@ -643,7 +643,7 @@ export default function DashboardMain() {
             </CardContent>
           </Card>
 
-          {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
+          {(user?.role === "ADMIN") && (
             <Card className="mt-8">
               <CardHeader>
                 <CardTitle>Input Jadwal Pengumpulan</CardTitle>
@@ -826,12 +826,12 @@ export default function DashboardMain() {
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
                                     <label className="text-right font-medium">Pelapor</label>
-                                    <div className="col-span-3">{incident.reporter_id}</div>
+                                    <div className="col-span-3">{incident.reporterId}</div>
                                   </div>
-                                  {incident.handled_by && (
+                                  {incident.handled_By && (
                                     <div className="grid grid-cols-4 items-center gap-4">
                                       <label className="text-right font-medium">Ditangani Oleh</label>
-                                      <div className="col-span-3">{incident.handled_by}</div>
+                                      <div className="col-span-3">{incident.handled_By}</div>
                                     </div>
                                   )}
                                   {incident.time_handled && (
