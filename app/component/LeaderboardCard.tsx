@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { motion } from "framer-motion"
 import { FaTrophy, FaMedal, FaAward } from "react-icons/fa"
@@ -8,20 +8,47 @@ import { Button } from "@/components/ui/button"
 
 interface LeaderboardEntry {
   id: string
-  namaPemilik: string
+  userId: string
   totalPoin: number
   jumlahPengumpulan: number
+  username?: string
 }
 
-interface LeaderboardCardProps {
-  users: LeaderboardEntry[]
-}
-
-const LeaderboardCard: React.FC<LeaderboardCardProps> = ({ users }) => {
-  const [currentPage, setCurrentPage] = React.useState(1)
+const LeaderboardCard: React.FC = () => {
+  const [users, setUsers] = useState<LeaderboardEntry[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
   const usersPerPage = 10
-  const totalPages = Math.ceil(users.length / usersPerPage)
 
+  useEffect(() => {
+    const fetchLeaderboardData = async () => {
+      try {
+        // Fetch leaderboard data
+        const leaderboardRes = await fetch("http://localhost:3001/api/leaderboard")
+        const leaderboardData: LeaderboardEntry[] = await leaderboardRes.json()
+
+        // Fetch users data
+        const usersRes = await fetch("http://localhost:3001/api/users")
+        const usersData = await usersRes.json()
+
+        // Gabungkan data berdasarkan userId
+        const enrichedLeaderboard = leaderboardData.map(entry => {
+          const user = usersData.find((u: { id: string }) => u.id === entry.userId)
+          return {
+            ...entry,
+            username: user ? user.username : "Tidak Diketahui"
+          }
+        })
+
+        setUsers(enrichedLeaderboard)
+      } catch (error) {
+        console.error("Gagal mengambil data leaderboard:", error)
+      }
+    }
+
+    fetchLeaderboardData()
+  }, [])
+
+  const totalPages = Math.ceil(users.length / usersPerPage)
   const paginatedUsers = users.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage)
 
   const nextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages))
@@ -40,7 +67,7 @@ const LeaderboardCard: React.FC<LeaderboardCardProps> = ({ users }) => {
               <LeaderboardRow
                 key={user.id}
                 rank={rank}
-                name={user.namaPemilik}
+                name={user.username || "Tidak Diketahui"}
                 points={user.totalPoin}
                 collections={user.jumlahPengumpulan}
               />
@@ -106,4 +133,3 @@ const LeaderboardRow: React.FC<LeaderboardRowProps> = ({ rank, name, points, col
 }
 
 export default LeaderboardCard
-

@@ -50,10 +50,13 @@ interface GarbageRecord {
 
 interface LeaderboardEntry {
   id: string
-  namaPemilik: string
+  userId: string
   totalPoin: number
+  namaPemilik: string
   jumlahPengumpulan: number
+  username?: string
 }
+
 
 interface Incident {
   id: string
@@ -738,7 +741,7 @@ export default function DashboardMain() {
 
         <TabsContent value="gamification">
           <div className="grid grid-cols-1 gap-6">
-            <LeaderboardCard users={leaderboard} />
+            <LeaderboardCard/>
             <AchievementsCard />
             <UserStatisticsCard leaderboard={leaderboard} />
           </div>
