@@ -5,7 +5,7 @@ const DashboardFooter: React.FC = () => {
   return (
     <footer className="bg-gradient-to-br from-green-800 to-gray-900 py-10 text-white text-center relative shadow-xl border-t border-green-500">
       <div className="container mx-auto px-6 flex flex-col items-center space-y-6">
-        <h2 className="text-2xl font-bold tracking-wide uppercase">WasteMate</h2>
+        <h2 className="text-2xl font-bold tracking-wide uppercase">SobatSampah</h2>
         <p className="text-sm md:text-base max-w-lg text-gray-300">
           Transforming waste management for a cleaner, greener, and smarter future.
         </p>
@@ -35,13 +35,13 @@ const DashboardFooter: React.FC = () => {
             <FaLinkedin />
           </a>
           <a
-            href="mailto:info@wastemate.com"
+            href="mailto:info@SobatSampah.com"
             className="text-white text-2xl transition-transform transform hover:scale-125 hover:text-red-400"
           >
             <FaEnvelope />
           </a>
         </div>
-        <p className="text-xs md:text-sm text-gray-400">&copy; 2024 WasteMate. All rights reserved.</p>
+        <p className="text-xs md:text-sm text-gray-400">&copy; 2024 SobatSampah. All rights reserved.</p>
       </div>
       <div className="absolute bottom-4 right-6 text-xs text-gray-300 animate-pulse">
         Made with ❤️ by

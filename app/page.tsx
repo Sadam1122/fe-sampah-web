@@ -33,7 +33,7 @@ export default function LoginPage() {
         <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-gradient-to-br from-lime-400 to-green-500 rounded-full blur-3xl opacity-50"></div>
 
         <h1 className="text-3xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-br from-green-600 to-teal-600">
-          Welcome to WasteMate
+          Welcome to SobatSampah
         </h1>
 
         <form onSubmit={handleLogin} className="space-y-6">

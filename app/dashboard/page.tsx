@@ -22,7 +22,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-100 via-emerald-50 to-teal-100">
-        <div className="text-2xl font-semibold text-green-600">Loading...</div>
+        {/* <div className="text-2xl font-semibold text-green-600">Loading...</div> */}
       </div>
     )
   }

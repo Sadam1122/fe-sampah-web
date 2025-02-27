@@ -15,7 +15,7 @@ export default function DashboardHeader() {
         <div className="flex justify-between items-center">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <FaRecycle className="text-white text-3xl" />
-            <span className="text-2xl font-bold text-white">WasteMate</span>
+            <span className="text-2xl font-bold text-white">SobatSampah</span>
           </Link>
           <nav className="hidden md:flex items-center space-x-6">
             <NavLink href="/dashboard" icon={<FaRecycle />}>

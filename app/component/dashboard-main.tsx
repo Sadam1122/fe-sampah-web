@@ -35,11 +35,42 @@ import LeaderboardCard from "./LeaderboardCard"
 import AchievementsCard from "./AchievementsCard"
 import UserStatisticsCard from "./UserStatisticsCard"
 
+// Tambahkan import untuk Search icon
+import { Search } from "lucide-react"
+import { Loader2 } from "lucide-react"
+
+function LoadingAnimation() {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <motion.div
+        className="bg-white p-8 rounded-lg shadow-lg flex flex-col items-center"
+        initial={{ scale: 0.5, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+        >
+          <Loader2 className="w-16 h-16 text-green-500" />
+        </motion.div>
+        <motion.h2
+          className="mt-4 text-2xl font-bold text-green-700"
+          animate={{ opacity: [1, 0.5, 1] }}
+          transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+        >
+          Loading...
+        </motion.h2>
+      </motion.div>
+    </div>
+  )
+}
+
 // Type definitions
 interface GarbageRecord {
   id: string
   desaId: string
-  namaPemilik: string
+  userId: string
   berat: number
   jenisSampah: string
   poin: number
@@ -52,11 +83,9 @@ interface LeaderboardEntry {
   id: string
   userId: string
   totalPoin: number
-  namaPemilik: string
   jumlahPengumpulan: number
   username?: string
 }
-
 
 interface Incident {
   id: string
@@ -86,6 +115,14 @@ interface Desa {
   provinsi: string
 }
 
+interface User {
+  id: string
+  username: string
+  name: string
+  role: string
+  desaId: string
+}
+
 const wasteTypes = ["Plastik", "Kertas", "Kaca", "Organik", "B3"]
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -107,13 +144,18 @@ export default function DashboardMain() {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
   const [newRecord, setNewRecord] = useState({
     berat: "",
-    namaPemilik: "",
+    userId: "",
     rt: "",
     rw: "",
     jenisSampah: "",
   })
   const [desaInfo, setDesaInfo] = useState<Desa | null>(null)
+  const [users, setUsers] = useState<User[]>([])
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const recordsPerPage = 15
+  const [userSearchTerm, setUserSearchTerm] = useState("")
+  // Tambahkan state untuk loading pencarian
+  const [isSearchingUser, setIsSearchingUser] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -123,6 +165,46 @@ export default function DashboardMain() {
       fetchData()
     }
   }, [user, loading, router])
+
+  // Ubah URL fetch users
+  // Tambahkan debugging untuk fetch users
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (!user) return
+
+      setIsLoadingUsers(true)
+      try {
+        console.log("Fetching users...") // Debug log
+        const response = await axios.get(`${API_URL}/api/users/${user.desaId}`, {
+          headers: {
+            "x-user-role": user.role,
+          },
+        })
+
+        if (response.status === 200) {
+          console.log("Users fetched successfully:", response.data) // Debug log
+          const filteredUsers = response.data.filter((u: User) => u.role === "WARGA")
+          setUsers(filteredUsers)
+        } else {
+          throw new Error("Failed to fetch users")
+        }
+      } catch (error) {
+        console.error("Error fetching users:", error)
+        toast({
+          title: "Error",
+          description: "Gagal mengambil daftar pengguna. Silakan coba lagi.",
+          variant: "destructive",
+        })
+        setUsers([])
+      } finally {
+        setIsLoadingUsers(false)
+      }
+    }
+
+    if (user) {
+      fetchUsers()
+    }
+  }, [user, toast])
 
   const fetchDesaInfo = async (desaId: string) => {
     if (!user || user.role === "SUPERADMIN") return
@@ -207,8 +289,6 @@ export default function DashboardMain() {
     }
   }, [user, toast])
 
-
-  
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setNewRecord((prev) => ({ ...prev, [name]: value }))
@@ -220,6 +300,7 @@ export default function DashboardMain() {
     return Math.round(basePoints * multiplier)
   }
 
+  // Modifikasi fungsi handleSubmit untuk mengirim userId
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
@@ -233,35 +314,62 @@ export default function DashboardMain() {
       return
     }
 
+    // Validate required fields
+    if (!newRecord.userId || !newRecord.berat || !newRecord.rt || !newRecord.rw || !newRecord.jenisSampah) {
+      toast({
+        title: "Error",
+        description: "Semua field harus diisi.",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       const weight = Number.parseFloat(newRecord.berat)
+      if (isNaN(weight) || weight <= 0) {
+        toast({
+          title: "Error",
+          description: "Berat harus berupa angka positif.",
+          variant: "destructive",
+        })
+        return
+      }
+
       const points = calculatePoints(weight, newRecord.jenisSampah)
-      const currentTime = new Date().toISOString()
 
-      const response = await axios.post(
-        `${API_URL}/api/pengumpulan-sampah`,
-        {
-          desaId: user.desaId,
-          berat: weight,
-          namaPemilik: newRecord.namaPemilik,
-          rt: newRecord.rt,
-          rw: newRecord.rw,
-          jenisSampah: newRecord.jenisSampah,
-          poin: points,
-          waktu: currentTime,
-        },
-        {
-          headers: { "x-user-role": user.role },
-        },
-      )
+      // Find the selected user to get their username
+      const selectedUser = users.find((u) => u.id === newRecord.userId)
+      if (!selectedUser) {
+        toast({
+          title: "Error",
+          description: "User tidak ditemukan.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      if (response.status === 201) {
-        // Update leaderboard
-        await axios.post(
+      // Format the request body according to the new structure
+      const requestBody = {
+        username: selectedUser.username,
+        berat: weight,
+        rt: newRecord.rt,
+        rw: newRecord.rw,
+        jenisSampah: newRecord.jenisSampah,
+        poin: points,
+      }
+
+      // Post to pengumpulan-sampah with the new format
+      const garbageResponse = await axios.post(`${API_URL}/api/pengumpulan-sampah`, requestBody, {
+        headers: { "x-user-role": user.role },
+      })
+
+      if (garbageResponse.status === 201) {
+        // Update leaderboard data
+        const leaderboardResponse = await axios.post(
           `${API_URL}/api/leaderboard`,
           {
             desaId: user.desaId,
-            namaPemilik: newRecord.namaPemilik,
+            userId: selectedUser.id,
             totalPoin: points,
             jumlahPengumpulan: 1,
           },
@@ -270,14 +378,19 @@ export default function DashboardMain() {
           },
         )
 
-        toast({
-          title: "Sukses",
-          description: "Data berhasil ditambahkan dan leaderboard diperbarui.",
-        })
-        setNewRecord({ berat: "", namaPemilik: "", rt: "", rw: "", jenisSampah: "" })
-        fetchData()
+        if (leaderboardResponse.status === 201) {
+          toast({
+            title: "Sukses",
+            description: "Data berhasil ditambahkan dan leaderboard diperbarui.",
+          })
+          setNewRecord({ berat: "", userId: "", rt: "", rw: "", jenisSampah: "" })
+          // Fetch updated data to refresh the table and leaderboard
+          fetchData()
+        } else {
+          throw new Error("Failed to update leaderboard")
+        }
       } else {
-        throw new Error("Failed to add data")
+        throw new Error("Failed to add garbage collection data")
       }
     } catch (error) {
       console.error("Error submitting new record:", error)
@@ -291,6 +404,44 @@ export default function DashboardMain() {
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value)
+  }
+
+  const deleteData = async (id: string) => {
+    if (!user) return
+
+    if (user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+      toast({
+        title: "Error",
+        description: "Anda tidak memiliki izin untuk menghapus data.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await axios.delete(`${API_URL}/api/pengumpulan-sampah/${id}`, {
+        headers: { "x-user-role": user.role },
+      })
+
+      if (response.status === 200) {
+        toast({
+          title: "Sukses",
+          description: "Data berhasil dihapus.",
+        })
+
+        // Hapus data dari state
+        setGarbageData((prevRecords) => prevRecords.filter((record) => record.id !== id))
+      } else {
+        throw new Error("Gagal menghapus data")
+      }
+    } catch (error) {
+      console.error("Error deleting data:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menghapus data.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleRowDoubleClick = (record: GarbageRecord) => {
@@ -346,10 +497,10 @@ export default function DashboardMain() {
       })
       return
     }
-  
+
     const isSuperAdmin = user.role === "SUPERADMIN"
     const isAdmin = user.role === "ADMIN"
-  
+
     // Cek izin perubahan status
     if (
       (!isSuperAdmin && !isAdmin) || // Jika bukan ADMIN/SUPERADMIN
@@ -362,14 +513,14 @@ export default function DashboardMain() {
       })
       return
     }
-  
+
     try {
       const response = await axios.put(
         `${API_URL}/api/insiden`, // PUT ke endpoint utama tanpa ID di URL
         { id, status: newStatus }, // Body request sesuai format
-        { headers: { "x-user-role": user.role } } // Tambahkan header otorisasi
+        { headers: { "x-user-role": user.role } }, // Tambahkan header otorisasi
       )
-  
+
       if (response.status === 200) {
         toast({
           title: "Sukses",
@@ -388,14 +539,16 @@ export default function DashboardMain() {
       })
     }
   }
-  
-  
-  const filteredData = garbageData.filter(
-    (record) =>
-      record.namaPemilik.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${record.rt} ${record.rw}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.jenisSampah.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+
+  // Ubah implementasi filteredData untuk memastikan konsistensi pencarian
+  const filteredData = garbageData.filter((record) => {
+    const recordUser = users.find((u) => u.id === record.userId)
+    return (
+      recordUser?.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `RT ${record.rt} RW ${record.rw}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.jenisSampah.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  })
 
   const totalPages = Math.ceil(filteredData.length / recordsPerPage)
   const currentRecords = filteredData.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage)
@@ -431,8 +584,8 @@ export default function DashboardMain() {
     }))
     .sort((a, b) => b["Total Sampah"] - a["Total Sampah"]) // Urutkan dari terbesar ke terkecil
 
-  if (loading) {
-    return <div>Loading...</div>
+  if (loading || isLoadingUsers) {
+    return <LoadingAnimation />
   }
 
   if (error) {
@@ -492,7 +645,7 @@ export default function DashboardMain() {
               <CardTitle>Daftar Pengumpulan Sampah</CardTitle>
             </CardHeader>
             <CardContent>
-              {(user?.role === "ADMIN") && (
+              {user?.role === "ADMIN" && (
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
@@ -508,18 +661,93 @@ export default function DashboardMain() {
                         required
                       />
                     </div>
+                    {/* Perbaiki implementasi user selection dropdown */}
+                    {/* Update bagian Select User dengan debugging */}
                     <div>
-                      <label htmlFor="namaPemilik" className="block text-sm font-medium text-gray-700">
-                        Nama Pemilik
+                      <label htmlFor="userId" className="block text-sm font-medium text-gray-700">
+                        Pilih User
                       </label>
-                      <Input
-                        type="text"
-                        id="namaPemilik"
-                        name="namaPemilik"
-                        value={newRecord.namaPemilik}
-                        onChange={handleInputChange}
-                        required
-                      />
+                      <div className="relative">
+                        <Select
+                          name="userId"
+                          value={newRecord.userId}
+                          onValueChange={(value) => {
+                            console.log("Selected user:", value) // Debug log
+                            setNewRecord((prev) => ({
+                              ...prev,
+                              userId: value,
+                            }))
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Cari username..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <div className="p-2">
+                              <div className="relative">
+                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                  type="text"
+                                  placeholder="Ketik username..."
+                                  value={userSearchTerm}
+                                  onChange={(e) => {
+                                    const searchValue = e.target.value
+                                    console.log("Search term:", searchValue) // Debug log
+                                    setUserSearchTerm(searchValue)
+                                    setIsSearchingUser(true)
+                                    setTimeout(() => setIsSearchingUser(false), 300)
+                                  }}
+                                  className="pl-8 mb-2"
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-[200px] overflow-y-auto">
+                              {isSearchingUser ? (
+                                <div className="p-4 text-center">
+                                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto"></div>
+                                  <p className="text-sm text-gray-500 mt-2">Mencari user...</p>
+                                </div>
+                              ) : (
+                                <>
+                                  {(() => {
+                                    const filteredUsers = users.filter((u) => {
+                                      const searchCheck = u.username
+                                        .toLowerCase()
+                                        .includes(userSearchTerm.toLowerCase())
+                                      return u.role === "WARGA" && searchCheck && u.id
+                                    })
+
+                                    console.log("Filtered users:", filteredUsers) // Debug log
+
+                                    return filteredUsers.length > 0 ? (
+                                      filteredUsers.map((u) => (
+                                        <SelectItem
+                                          key={u.id}
+                                          value={u.id || "default-id"} // Pastikan selalu ada value yang valid
+                                          className="cursor-pointer hover:bg-gray-100"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <div className="flex-1">{u.username || "Unnamed User"}</div>
+                                            {user?.role === "SUPERADMIN" && (
+                                              <span className="text-xs text-muted-foreground">
+                                                {u.desaId || "No Desa"}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </SelectItem>
+                                      ))
+                                    ) : (
+                                      <div className="p-2 text-sm text-gray-500 text-center">
+                                        Tidak ada user ditemukan
+                                      </div>
+                                    )
+                                  })()}
+                                </>
+                              )}
+                            </div>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div>
                       <label htmlFor="rt" className="block text-sm font-medium text-gray-700">
@@ -555,7 +783,7 @@ export default function DashboardMain() {
                       </Select>
                     </div>
                   </div>
-                  <Button type="submit" className="w-full">
+                  <Button type="submit" className="w-full" onClick={handleSubmit}>
                     Kirim Data Pengumpulan
                   </Button>
                 </form>
@@ -568,7 +796,7 @@ export default function DashboardMain() {
                     type="text"
                     value={searchTerm}
                     onChange={handleSearchChange}
-                    placeholder="Cari berdasarkan nama, alamat, atau jenis sampah..."
+                    placeholder="Cari data berdasarkan username, alamat, atau jenis sampah..."
                     className="w-full p-2 border-0 outline-none"
                   />
                 </div>
@@ -593,22 +821,27 @@ export default function DashboardMain() {
                           </td>
                         </tr>
                       ) : (
-                        currentRecords.map((record) => (
-                          <tr
-                            key={record.id}
-                            onDoubleClick={() => handleRowDoubleClick(record)}
-                            className="cursor-pointer hover:bg-green-100 transition-colors duration-300"
-                          >
-                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.berat}</td>
-                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.namaPemilik}</td>
-                            <td className="px-6 py-4 border-t border-b border-gray-300">{`RT ${record.rt} RW ${record.rw}`}</td>
-                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.jenisSampah}</td>
-                            <td className="px-6 py-4 border-t border-b border-gray-300">{record.poin}</td>
-                            <td className="px-6 py-4 border-t border-b border-gray-300">
-                              {new Date(record.waktu).toLocaleString("id-ID")}
-                            </td>
-                          </tr>
-                        ))
+                        currentRecords.map((record) => {
+                          const recordUser = users.find((u) => u.id === record.userId)
+                          return (
+                            <tr
+                              key={record.id}
+                              onDoubleClick={() => handleRowDoubleClick(record)}
+                              className="cursor-pointer hover:bg-green-100 transition-colors duration-300"
+                            >
+                              <td className="px-6 py-4 border-t border-b border-gray-300">{record.berat}</td>
+                              <td className="px-6 py-4 border-t border-b border-gray-300">
+                                {users.find((u) => u.id === record.userId)?.username || "User tidak ditemukan"}
+                              </td>
+                              <td className="px-6 py-4 border-t border-b border-gray-300">{`RT ${record.rt} RW ${record.rw}`}</td>
+                              <td className="px-6 py-4 border-t border-b border-gray-300">{record.jenisSampah}</td>
+                              <td className="px-6 py-4 border-t border-b border-gray-300">{record.poin}</td>
+                              <td className="px-6 py-4 border-t border-b border-gray-300">
+                                {new Date(record.waktu).toLocaleString("id-ID")}
+                              </td>
+                            </tr>
+                          )
+                        })
                       )}
                     </tbody>
                   </table>
@@ -641,12 +874,13 @@ export default function DashboardMain() {
                   onClose={() => setIsModalOpen(false)}
                   currentData={selectedRecord}
                   updateData={updateData}
+                  deleteData={deleteData} // Tambahkan ini
                 />
               )}
             </CardContent>
           </Card>
 
-          {(user?.role === "ADMIN") && (
+          {user?.role === "ADMIN" && (
             <Card className="mt-8">
               <CardHeader>
                 <CardTitle>Input Jadwal Pengumpulan</CardTitle>
@@ -741,9 +975,9 @@ export default function DashboardMain() {
 
         <TabsContent value="gamification">
           <div className="grid grid-cols-1 gap-6">
-            <LeaderboardCard/>
+            <LeaderboardCard />
             <AchievementsCard />
-            <UserStatisticsCard leaderboard={leaderboard} />
+            <UserStatisticsCard />
           </div>
         </TabsContent>
 

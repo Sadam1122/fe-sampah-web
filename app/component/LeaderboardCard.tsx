@@ -27,8 +27,13 @@ const LeaderboardCard: React.FC = () => {
         const leaderboardData: LeaderboardEntry[] = await leaderboardRes.json()
 
         // Fetch users data
-        const usersRes = await fetch("http://localhost:3001/api/users")
-        const usersData = await usersRes.json()
+        const usersRes = await fetch("http://localhost:3001/api/users", {
+          headers: {
+            "x-user-role": "SUPERADMIN", // Pastikan role yang sesuai
+          },
+        });
+        const usersData = await usersRes.json();
+        
 
         // Gabungkan data berdasarkan userId
         const enrichedLeaderboard = leaderboardData.map(entry => {
