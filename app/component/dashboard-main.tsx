@@ -83,6 +83,7 @@ interface LeaderboardEntry {
   id: string
   userId: string
   totalPoin: number
+  poinSaatIni: number
   jumlahPengumpulan: number
   username?: string
 }
@@ -371,6 +372,7 @@ export default function DashboardMain() {
             desaId: user.desaId,
             userId: selectedUser.id,
             totalPoin: points,
+            poinSaatIni: points,
             jumlahPengumpulan: 1,
           },
           {
