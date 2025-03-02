@@ -17,7 +17,10 @@ interface WawasanAIProps {
   users: Array<{
     userId: string
     totalPoin: number
-    username?: string
+    user: {
+      username: string
+      role: string
+    }
   }>
 }
 
@@ -58,6 +61,8 @@ const fuzzyPlasticRecycling = (plasticRate: number): string => {
 const fuzzyFuelSavings = (rtVolumes: Record<string, number>): string => {
   const totalVolume = Object.values(rtVolumes).reduce((sum, vol) => sum + vol, 0)
   const highVolumeRT = Object.entries(rtVolumes).sort((a, b) => b[1] - a[1])[0]
+
+  if (!highVolumeRT) return "Data Tidak Mencukupi"
 
   const volumeRatio = highVolumeRT[1] / totalVolume
 
@@ -135,8 +140,8 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
       {
         text: `Prediksi peningkatan sampah: ${predictedIncrease}`,
         values: {
-          "Sampah Bulan Lalu (kg)": lastMonthWaste,
-          "Sampah Bulan Ini (kg)": currentMonthWaste,
+          "Sampah Bulan Lalu (kg)": lastMonthWaste.toFixed(2),
+          "Sampah Bulan Ini (kg)": currentMonthWaste.toFixed(2),
           Rasio: lastMonthWaste > 0 ? (currentMonthWaste / lastMonthWaste).toFixed(2) : "N/A",
         },
         color:
@@ -148,7 +153,7 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
       },
       {
         text: `Analisis tren sampah musiman: ${seasonalPrediction}`,
-        values: { "Data Bulanan (kg)": monthlyData },
+        values: { "Data Bulanan (kg)": monthlyData.map((value) => value.toFixed(2)).join(", ") },
         color:
           seasonalPrediction === "Peningkatan Musiman Signifikan"
             ? "border-l-4 border-red-500"
@@ -168,7 +173,11 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
       },
       {
         text: `Analisis pola menunjukkan jumlah sampah setiap lokasi: ${fuelSavings}`,
-        values: { "Volume Sampah RT": rtVolumes },
+        values: {
+          "Volume Sampah RT": Object.entries(rtVolumes)
+            .map(([rt, volume]) => `${rt}: ${volume.toFixed(2)} kg`)
+            .join(", "),
+        },
         color:
           fuelSavings === "Merata"
             ? "border-l-4 border-green-500"
@@ -184,7 +193,7 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
         color: "border-l-4 border-blue-500",
       },
       {
-        text: `${topCollector?.username || "Unknown User"} adalah pengumpul terbaik dengan ${
+        text: `${topCollector?.user?.username || "Unknown User"} adalah pengumpul terbaik dengan ${
           topCollector?.totalPoin || 0
         } poin`,
         values: {},

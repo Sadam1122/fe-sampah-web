@@ -37,7 +37,6 @@ import UserStatisticsCard from "./UserStatisticsCard"
 
 // Tambahkan import untuk Search icon
 import { Search } from "lucide-react"
-import { Loader2 } from "lucide-react"
 
 function LoadingAnimation() {
   return (
@@ -50,14 +49,14 @@ function LoadingAnimation() {
       >
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
         >
           <FaRecycle className="w-16 h-16 text-green-500" />
         </motion.div>
         <motion.h2
           className="mt-4 text-2xl font-bold text-green-700"
           animate={{ opacity: [1, 0.5, 1] }}
-          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
         >
           Memuat Dashboard...
         </motion.h2>
@@ -83,9 +82,13 @@ interface LeaderboardEntry {
   id: string
   userId: string
   totalPoin: number
-  poinSaatIni: number
   jumlahPengumpulan: number
-  username?: string
+  available: boolean
+  poinSaatIni: number
+  user: {
+    username: string
+    role: string
+  }
 }
 
 interface Incident {

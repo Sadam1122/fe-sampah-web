@@ -23,11 +23,11 @@ const LeaderboardCard: React.FC = () => {
     const fetchLeaderboardData = async () => {
       try {
         // Fetch leaderboard data
-        const leaderboardRes = await fetch("http://localhost:3001/api/leaderboard")
+        const leaderboardRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/leaderboard`)
         const leaderboardData: LeaderboardEntry[] = await leaderboardRes.json()
 
         // Fetch users data
-        const usersRes = await fetch("http://localhost:3001/api/users", {
+        const usersRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users`, {
           headers: {
             "x-user-role": "SUPERADMIN", // Pastikan role yang sesuai
           },
