@@ -50,16 +50,16 @@ function LoadingAnimation() {
       >
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
         >
-          <Loader2 className="w-16 h-16 text-green-500" />
+          <FaRecycle className="w-16 h-16 text-green-500" />
         </motion.div>
         <motion.h2
           className="mt-4 text-2xl font-bold text-green-700"
           animate={{ opacity: [1, 0.5, 1] }}
-          transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
         >
-          Loading...
+          Memuat Dashboard...
         </motion.h2>
       </motion.div>
     </div>
