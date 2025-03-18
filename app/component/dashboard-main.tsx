@@ -6,7 +6,7 @@ import { FaTrash, FaRecycle, FaMapMarkerAlt, FaCalendarAlt, FaSearch } from "rea
 import { motion } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
@@ -35,8 +35,20 @@ import LeaderboardCard from "./LeaderboardCard"
 import AchievementsCard from "./AchievementsCard"
 import UserStatisticsCard from "./UserStatisticsCard"
 
-// Tambahkan import untuk Search icon
-import { Search } from "lucide-react"
+// Import icons
+import { Search, Plus, Trash2, Edit, ArrowUpDown, Info } from "lucide-react"
+
+// Type definitions for waste types management
+interface WasteType {
+  id: string
+  name: string
+  description: string
+  pricePerKg: number
+  recyclable: boolean
+  hazardous: boolean
+  createdAt: string
+  updatedAt: string
+}
 
 function LoadingAnimation() {
   return (
@@ -127,7 +139,6 @@ interface User {
   desaId: string
 }
 
-const wasteTypes = ["Plastik", "Kertas", "Kaca", "Organik", "B3"]
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function DashboardMain() {
@@ -158,8 +169,32 @@ export default function DashboardMain() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const recordsPerPage = 15
   const [userSearchTerm, setUserSearchTerm] = useState("")
-  // Tambahkan state untuk loading pencarian
   const [isSearchingUser, setIsSearchingUser] = useState(false)
+  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null)
+
+  // Waste Types Management State
+  const [wasteTypesList, setWasteTypesList] = useState<WasteType[]>([])
+  const [wasteTypeSearchTerm, setWasteTypeSearchTerm] = useState("")
+  const [selectedWasteType, setSelectedWasteType] = useState<WasteType | null>(null)
+  const [isWasteTypeDialogOpen, setIsWasteTypeDialogOpen] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [wasteTypeFormData, setWasteTypeFormData] = useState({
+    name: "",
+    description: "",
+    pricePerKg: "",
+    recyclable: false,
+    hazardous: false,
+  })
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof WasteType | null
+    direction: "ascending" | "descending"
+  }>({ key: null, direction: "ascending" })
+  const [wasteTypeStats, setWasteTypeStats] = useState({
+    totalTypes: 0,
+    averagePrice: 0,
+    recyclablePercentage: 0,
+    hazardousCount: 0,
+  })
 
   useEffect(() => {
     if (!loading && !user) {
@@ -167,11 +202,286 @@ export default function DashboardMain() {
     } else if (user) {
       fetchDesaInfo(user.desaId)
       fetchData()
+      fetchWasteTypes() // Fetch waste types data
     }
   }, [user, loading, router])
 
-  // Ubah URL fetch users
-  // Tambahkan debugging untuk fetch users
+  // Fetch waste types
+  const fetchWasteTypes = async () => {
+    if (!user) return
+
+    try {
+      const response = await axios.get(`${API_URL}/api/waste-types`, {
+        headers: { "x-user-role": user.role },
+      })
+
+      if (response.status === 200) {
+        setWasteTypesList(response.data)
+        calculateWasteTypeStats(response.data)
+      }
+    } catch (error) {
+      console.error("Error fetching waste types:", error)
+      toast({
+        title: "Error",
+        description: "Gagal mengambil data jenis sampah. Silakan coba lagi.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Calculate waste type statistics
+  const calculateWasteTypeStats = (types: WasteType[]) => {
+    if (!types.length) return
+
+    const totalTypes = types.length
+    const totalPrice = types.reduce((sum, type) => sum + type.pricePerKg, 0)
+    const averagePrice = totalPrice / totalTypes
+    const recyclableCount = types.filter((type) => type.recyclable).length
+    const recyclablePercentage = (recyclableCount / totalTypes) * 100
+    const hazardousCount = types.filter((type) => type.hazardous).length
+
+    setWasteTypeStats({
+      totalTypes,
+      averagePrice,
+      recyclablePercentage,
+      hazardousCount,
+    })
+  }
+
+  // Handle waste type form input change
+  const handleWasteTypeInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target
+
+    if (type === "checkbox") {
+      const checked = (e.target as HTMLInputElement).checked
+      setWasteTypeFormData((prev) => ({ ...prev, [name]: checked }))
+    } else {
+      setWasteTypeFormData((prev) => ({ ...prev, [name]: value }))
+    }
+  }
+
+  // Reset waste type form
+  const resetWasteTypeForm = () => {
+    setWasteTypeFormData({
+      name: "",
+      description: "",
+      pricePerKg: "",
+      recyclable: false,
+      hazardous: false,
+    })
+    setIsEditMode(false)
+    setSelectedWasteType(null)
+  }
+
+  // Open edit dialog for waste type
+  const openWasteTypeEditDialog = (wasteType: WasteType) => {
+    setSelectedWasteType(wasteType)
+    setWasteTypeFormData({
+      name: wasteType.name,
+      description: wasteType.description,
+      pricePerKg: wasteType.pricePerKg.toString(),
+      recyclable: wasteType.recyclable,
+      hazardous: wasteType.hazardous,
+    })
+    setIsEditMode(true)
+    setIsWasteTypeDialogOpen(true)
+  }
+
+  // Open create dialog for waste type
+  const openWasteTypeCreateDialog = () => {
+    resetWasteTypeForm()
+    setIsWasteTypeDialogOpen(true)
+  }
+
+  // Handle waste type form submission
+  const handleWasteTypeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!user || (user.role !== "ADMIN" && user.role !== "SUPERADMIN")) {
+      toast({
+        title: "Akses Ditolak",
+        description: "Anda tidak memiliki izin untuk melakukan tindakan ini.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validate form
+    if (!wasteTypeFormData.name || !wasteTypeFormData.description || !wasteTypeFormData.pricePerKg) {
+      toast({
+        title: "Validasi Error",
+        description: "Silakan isi semua field yang diperlukan.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const price = Number.parseFloat(wasteTypeFormData.pricePerKg)
+    if (isNaN(price) || price < 0) {
+      toast({
+        title: "Validasi Error",
+        description: "Harga harus berupa angka positif.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      if (isEditMode && selectedWasteType) {
+        // Update existing waste type
+        const response = await axios.put(
+          `${API_URL}/api/waste-types/${selectedWasteType.id}`,
+          {
+            name: wasteTypeFormData.name,
+            description: wasteTypeFormData.description,
+            pricePerKg: Number.parseFloat(wasteTypeFormData.pricePerKg),
+            recyclable: wasteTypeFormData.recyclable,
+            hazardous: wasteTypeFormData.hazardous,
+          },
+          { headers: { "x-user-role": user.role } },
+        )
+
+        if (response.status === 200) {
+          toast({
+            title: "Sukses",
+            description: "Jenis sampah berhasil diperbarui.",
+          })
+
+          // Update local state
+          setWasteTypesList((prev) => prev.map((item) => (item.id === selectedWasteType.id ? response.data : item)))
+          calculateWasteTypeStats(
+            wasteTypesList.map((item) => (item.id === selectedWasteType.id ? response.data : item)),
+          )
+        }
+      } else {
+        // Create new waste type
+        const response = await axios.post(
+          `${API_URL}/api/waste-types`,
+          {
+            name: wasteTypeFormData.name,
+            description: wasteTypeFormData.description,
+            pricePerKg: Number.parseFloat(wasteTypeFormData.pricePerKg),
+            recyclable: wasteTypeFormData.recyclable,
+            hazardous: wasteTypeFormData.hazardous,
+          },
+          { headers: { "x-user-role": user.role } },
+        )
+
+        if (response.status === 201) {
+          toast({
+            title: "Sukses",
+            description: "Jenis sampah baru berhasil ditambahkan.",
+          })
+
+          // Add to local state
+          const updatedList = [...wasteTypesList, response.data]
+          setWasteTypesList(updatedList)
+          calculateWasteTypeStats(updatedList)
+        }
+      }
+
+      // Close dialog and reset form
+      setIsWasteTypeDialogOpen(false)
+      resetWasteTypeForm()
+    } catch (error) {
+      console.error("Error submitting waste type form:", error)
+      toast({
+        title: "Error",
+        description: isEditMode
+          ? "Gagal memperbarui jenis sampah. Silakan coba lagi."
+          : "Gagal membuat jenis sampah. Silakan coba lagi.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle waste type deletion
+  const handleWasteTypeDelete = async (id: string) => {
+    if (!user || (user.role !== "ADMIN" && user.role !== "SUPERADMIN")) {
+      toast({
+        title: "Akses Ditolak",
+        description: "Anda tidak memiliki izin untuk menghapus jenis sampah.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!confirm("Apakah Anda yakin ingin menghapus jenis sampah ini? Tindakan ini tidak dapat dibatalkan.")) {
+      return
+    }
+
+    try {
+      const response = await axios.delete(`${API_URL}/api/waste-types/${id}`, {
+        headers: { "x-user-role": user.role },
+      })
+
+      if (response.status === 200) {
+        toast({
+          title: "Sukses",
+          description: "Jenis sampah berhasil dihapus.",
+        })
+
+        // Remove from local state
+        const updatedList = wasteTypesList.filter((item) => item.id !== id)
+        setWasteTypesList(updatedList)
+        calculateWasteTypeStats(updatedList)
+      }
+    } catch (error) {
+      console.error("Error deleting waste type:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menghapus jenis sampah. Mungkin sedang digunakan dalam pengumpulan yang ada.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle waste type sorting
+  const handleWasteTypeSort = (key: keyof WasteType) => {
+    let direction: "ascending" | "descending" = "ascending"
+
+    if (sortConfig.key === key && sortConfig.direction === "ascending") {
+      direction = "descending"
+    }
+
+    setSortConfig({ key, direction })
+
+    const sortedData = [...wasteTypesList].sort((a, b) => {
+      if (a[key] < b[key]) {
+        return direction === "ascending" ? -1 : 1
+      }
+      if (a[key] > b[key]) {
+        return direction === "ascending" ? 1 : -1
+      }
+      return 0
+    })
+
+    setWasteTypesList(sortedData)
+  }
+
+  // Filter waste types based on search term
+  const filteredWasteTypes = wasteTypesList.filter(
+    (wasteType) =>
+      wasteType.name.toLowerCase().includes(wasteTypeSearchTerm.toLowerCase()) ||
+      wasteType.description.toLowerCase().includes(wasteTypeSearchTerm.toLowerCase()),
+  )
+
+  // Prepare chart data for waste types
+  const wasteTypePriceData = wasteTypesList.map((type) => ({
+    name: type.name,
+    price: type.pricePerKg,
+  }))
+
+  const wasteTypeCompositionData = [
+    { name: "Recyclable", value: wasteTypesList.filter((t) => t.recyclable).length },
+    { name: "Non-Recyclable", value: wasteTypesList.filter((t) => !t.recyclable).length },
+  ].filter((item) => item.value > 0)
+
+  const wasteTypeHazardousData = [
+    { name: "Hazardous", value: wasteTypesList.filter((t) => t.hazardous).length },
+    { name: "Non-Hazardous", value: wasteTypesList.filter((t) => !t.hazardous).length },
+  ].filter((item) => item.value > 0)
+
   useEffect(() => {
     const fetchUsers = async () => {
       if (!user) return
@@ -296,9 +606,30 @@ export default function DashboardMain() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setNewRecord((prev) => ({ ...prev, [name]: value }))
+
+    // Recalculate price when weight changes
+    if (name === "berat" && newRecord.jenisSampah) {
+      const selectedWasteType = wasteTypesList.find((type) => type.name === newRecord.jenisSampah)
+      if (selectedWasteType && value) {
+        const weight = Number.parseFloat(value)
+        const price = selectedWasteType.pricePerKg * weight
+        setCalculatedPrice(price)
+      } else {
+        setCalculatedPrice(null)
+      }
+    }
   }
 
   const calculatePoints = (weight: number, wasteType: string): number => {
+    const selectedWasteType = wasteTypesList.find((type) => type.name === wasteType)
+    if (selectedWasteType) {
+      // Base points on actual price
+      const basePoints = weight * selectedWasteType.pricePerKg
+      // Apply multiplier based on recyclability
+      const multiplier = selectedWasteType.recyclable ? 1.5 : 1
+      return Math.round(basePoints * multiplier)
+    }
+    // Fallback to original calculation if waste type not found
     const basePoints = weight * 10
     const multiplier = wasteType === "Organik" ? 1 : 1.5
     return Math.round(basePoints * multiplier)
@@ -571,11 +902,11 @@ export default function DashboardMain() {
     }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) // Urutkan data
 
-  const wasteComposition = wasteTypes
+  const wasteComposition = wasteTypesList
     .map((type) => ({
-      name: type,
+      name: type.name,
       value: garbageData
-        .filter((record) => record.jenisSampah === type)
+        .filter((record) => record.jenisSampah === type.name)
         .reduce((sum, record) => sum + (isNaN(record.berat) ? 0 : Number(record.berat)), 0),
     }))
     .filter((item) => item.value > 0) // Only include categories with data
@@ -634,16 +965,318 @@ export default function DashboardMain() {
       </div>
 
       <Tabs defaultValue="collection" className="mb-8">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="collection">Pengumpulan Sampah</TabsTrigger>
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
           <TabsTrigger value="gamification">Gamifikasi</TabsTrigger>
+          <TabsTrigger value="waste-types">Jenis Sampah</TabsTrigger>
           {user?.role === "WARGA" ? (
             <TabsTrigger value="news">Berita</TabsTrigger>
           ) : (
             <TabsTrigger value="incidents">Insiden</TabsTrigger>
           )}
         </TabsList>
+
+        {/* Waste Types Tab Content */}
+        <TabsContent value="waste-types">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <StatCard
+              title="Total Jenis Sampah"
+              value={wasteTypeStats.totalTypes.toString()}
+              icon={<Info className="h-8 w-8 text-blue-500" />}
+              color="bg-blue-50 border-blue-200"
+            />
+            <StatCard
+              title="Harga Rata-rata"
+              value={`Rp${wasteTypeStats.averagePrice.toFixed(2)}/kg`}
+              icon={<ArrowUpDown className="h-8 w-8 text-amber-500" />}
+              color="bg-amber-50 border-amber-200"
+            />
+            <StatCard
+              title="Persentase Daur Ulang"
+              value={`${wasteTypeStats.recyclablePercentage.toFixed(2)}%`}
+              icon={<FaRecycle className="h-8 w-8 text-green-500" />}
+              color="bg-green-50 border-green-200"
+            />
+            <StatCard
+              title="Jenis Berbahaya"
+              value={wasteTypeStats.hazardousCount.toString()}
+              icon={<Trash2 className="h-8 w-8 text-red-500" />}
+              color="bg-red-50 border-red-200"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Daftar Jenis Sampah</CardTitle>
+                <CardDescription>Kelola jenis sampah dan informasi harganya</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center border border-gray-300 rounded-lg p-2 w-full md:w-2/3">
+                    <Search className="text-gray-500 mr-2" />
+                    <input
+                      type="text"
+                      value={wasteTypeSearchTerm}
+                      onChange={(e) => setWasteTypeSearchTerm(e.target.value)}
+                      placeholder="Cari jenis sampah..."
+                      className="w-full p-2 border-0 outline-none"
+                    />
+                  </div>
+                  {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
+                    <Button onClick={openWasteTypeCreateDialog} className="ml-2">
+                      <Plus className="mr-2 h-4 w-4" /> Tambah
+                    </Button>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto shadow-lg rounded-lg">
+                  <Table>
+                    <TableHeader className="bg-gradient-to-r from-green-400 to-green-600 text-white">
+                      <TableRow>
+                        <TableHead className="cursor-pointer" onClick={() => handleWasteTypeSort("name")}>
+                          Nama {sortConfig.key === "name" && (sortConfig.direction === "ascending" ? "↑" : "↓")}
+                        </TableHead>
+                        <TableHead>Deskripsi</TableHead>
+                        <TableHead className="cursor-pointer" onClick={() => handleWasteTypeSort("pricePerKg")}>
+                          Harga/kg{" "}
+                          {sortConfig.key === "pricePerKg" && (sortConfig.direction === "ascending" ? "↑" : "↓")}
+                        </TableHead>
+                        <TableHead>Properti</TableHead>
+                        <TableHead>Aksi</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredWasteTypes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-4 text-gray-600">
+                            Tidak ada jenis sampah ditemukan
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredWasteTypes.map((wasteType) => (
+                          <TableRow key={wasteType.id} className="hover:bg-green-50 transition-colors duration-200">
+                            <TableCell className="font-medium">{wasteType.name}</TableCell>
+                            <TableCell>{wasteType.description}</TableCell>
+                            <TableCell>Rp{Number(wasteType.pricePerKg).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-2">
+                                {wasteType.recyclable && (
+                                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                                    Daur Ulang
+                                  </Badge>
+                                )}
+                                {wasteType.hazardous && (
+                                  <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                                    Berbahaya
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => openWasteTypeEditDialog(wasteType)}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                      onClick={() => handleWasteTypeDelete(wasteType.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Analisis Jenis Sampah</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="price">
+                  <TabsList className="mb-4">
+                    <TabsTrigger value="price">Harga</TabsTrigger>
+                    <TabsTrigger value="recyclable">Daur Ulang</TabsTrigger>
+                    <TabsTrigger value="hazardous">Berbahaya</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="price">
+                    <div className="h-[300px]">
+                      <BarChart
+                        data={wasteTypePriceData}
+                        index="name"
+                        categories={["price"]}
+                        colors={["#10B981"]}
+                        valueFormatter={(value) => `Rp${Number(value).toFixed(2)}`}
+                        yAxisWidth={48}
+                      />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="recyclable">
+                    <div className="h-[300px]">
+                      <PieChart
+                        data={wasteTypeCompositionData}
+                        category="value"
+                        index="name"
+                        valueFormatter={(value) => `${value} jenis`}
+                        colors={["#10B981", "#6B7280"]}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      {wasteTypeCompositionData.map((item, index) => (
+                        <div key={index} className="flex items-center">
+                          <div
+                            className="w-4 h-4 rounded-full mr-2"
+                            style={{ backgroundColor: index === 0 ? "#10B981" : "#6B7280" }}
+                          ></div>
+                          <span>
+                            {item.name}: {item.value} jenis
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="hazardous">
+                    <div className="h-[300px]">
+                      <PieChart
+                        data={wasteTypeHazardousData}
+                        category="value"
+                        index="name"
+                        valueFormatter={(value) => `${value} jenis`}
+                        colors={["#EF4444", "#6B7280"]}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      {wasteTypeHazardousData.map((item, index) => (
+                        <div key={index} className="flex items-center">
+                          <div
+                            className="w-4 h-4 rounded-full mr-2"
+                            style={{ backgroundColor: index === 0 ? "#EF4444" : "#6B7280" }}
+                          ></div>
+                          <span>
+                            {item.name}: {item.value} jenis
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Waste Type Form Dialog */}
+          <Dialog open={isWasteTypeDialogOpen} onOpenChange={setIsWasteTypeDialogOpen}>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>{isEditMode ? "Edit Jenis Sampah" : "Tambah Jenis Sampah Baru"}</DialogTitle>
+                <DialogDescription>
+                  {isEditMode ? "Perbarui detail jenis sampah ini." : "Isi detail untuk menambahkan jenis sampah baru."}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleWasteTypeSubmit}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label htmlFor="name" className="text-right font-medium">
+                      Nama
+                    </label>
+                    <Input
+                      id="name"
+                      name="name"
+                      value={wasteTypeFormData.name}
+                      onChange={handleWasteTypeInputChange}
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label htmlFor="description" className="text-right font-medium">
+                      Deskripsi
+                    </label>
+                    <Input
+                      id="description"
+                      name="description"
+                      value={wasteTypeFormData.description}
+                      onChange={handleWasteTypeInputChange}
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label htmlFor="pricePerKg" className="text-right font-medium">
+                      Harga per kg (Rp)
+                    </label>
+                    <Input
+                      id="pricePerKg"
+                      name="pricePerKg"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={wasteTypeFormData.pricePerKg}
+                      onChange={handleWasteTypeInputChange}
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label className="text-right font-medium">Properti</label>
+                    <div className="col-span-3 space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="recyclable"
+                          name="recyclable"
+                          checked={wasteTypeFormData.recyclable}
+                          onChange={handleWasteTypeInputChange}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <label htmlFor="recyclable">Dapat Didaur Ulang</label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="hazardous"
+                          name="hazardous"
+                          checked={wasteTypeFormData.hazardous}
+                          onChange={handleWasteTypeInputChange}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <label htmlFor="hazardous">Berbahaya</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsWasteTypeDialogOpen(false)}>
+                    Batal
+                  </Button>
+                  <Button type="submit">{isEditMode ? "Perbarui" : "Tambah"}</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
         <TabsContent value="collection">
           <Card>
             <CardHeader>
@@ -773,21 +1406,41 @@ export default function DashboardMain() {
                       <Select
                         name="jenisSampah"
                         value={newRecord.jenisSampah}
-                        onValueChange={(value) => setNewRecord((prev) => ({ ...prev, jenisSampah: value }))}
+                        onValueChange={(value) => {
+                          setNewRecord((prev) => ({ ...prev, jenisSampah: value }))
+                          // Update price calculation when waste type changes
+                          const selectedWasteType = wasteTypesList.find((type) => type.name === value)
+                          if (selectedWasteType && newRecord.berat) {
+                            const weight = Number.parseFloat(newRecord.berat)
+                            const price = selectedWasteType.pricePerKg * weight
+                            setCalculatedPrice(price)
+                          }
+                        }}
                       >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Pilih Jenis Sampah" />
                         </SelectTrigger>
                         <SelectContent>
-                          {wasteTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
+                          {wasteTypesList.map((type) => (
+                            <SelectItem key={type.id} value={type.name}>
+                              {type.name} - Rp{type.pricePerKg}/kg
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+                  {calculatedPrice !== null && (
+                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm font-medium text-green-800">
+                        Harga Estimasi: Rp{calculatedPrice.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-green-600">
+                        {newRecord.berat} kg × Rp
+                        {wasteTypesList.find((t) => t.name === newRecord.jenisSampah)?.pricePerKg.toFixed(2) || 0}/kg
+                      </p>
+                    </div>
+                  )}
                   <Button type="submit" className="w-full" onClick={handleSubmit}>
                     Kirim Data Pengumpulan
                   </Button>
@@ -1174,6 +1827,30 @@ function DashboardCard({
         </div>
       </div>
     </motion.div>
+  )
+}
+
+function StatCard({
+  title,
+  value,
+  icon,
+  color,
+}: {
+  title: string
+  value: string
+  icon: React.ReactNode
+  color: string
+}) {
+  return (
+    <Card className={`${color} border`}>
+      <CardContent className="flex items-center p-6">
+        <div className="mr-4">{icon}</div>
+        <div>
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-2xl font-bold">{value}</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
