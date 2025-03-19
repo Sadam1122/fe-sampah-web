@@ -186,7 +186,7 @@ const WawasanAI: React.FC<WawasanAIProps> = ({ garbageData = [], users = [] }) =
               : "border-l-4 border-red-500",
       },
       {
-        text: `Rekomendasi: Tingkatkan pengumpulan di RT ${
+        text: `Rekomendasi: Tingkatkan pengumpulan di TPS ${
           Object.entries(rtVolumes).sort((a, b) => b[1] - a[1])[0]?.[0] || "-"
         }`,
         values: {},

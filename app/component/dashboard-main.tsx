@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { FaTrash, FaRecycle, FaMapMarkerAlt, FaCalendarAlt, FaSearch } from "react-icons/fa"
+import { FaTrash, FaRecycle, FaMapMarkerAlt, FaCalendarAlt } from "react-icons/fa"
 import { motion } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
@@ -31,12 +30,9 @@ import { useAuth } from "../hook/useAuth"
 import { NewsSection } from "./NewsSection"
 import axios from "axios"
 import type React from "react"
-import LeaderboardCard from "./LeaderboardCard"
-import AchievementsCard from "./AchievementsCard"
-import UserStatisticsCard from "./UserStatisticsCard"
 
 // Import icons
-import { Search, Plus, Trash2, Edit, ArrowUpDown, Info } from "lucide-react"
+import { Search, Plus, Trash2, Edit, ArrowUpDown, Info, TrendingUp, Users, DollarSign } from "lucide-react"
 
 // Type definitions for waste types management
 interface WasteType {
@@ -88,6 +84,8 @@ interface GarbageRecord {
   waktu: string
   rt: string
   rw: string
+  // Add rupiah field
+  rupiah?: number
 }
 
 interface LeaderboardEntry {
@@ -101,6 +99,8 @@ interface LeaderboardEntry {
     username: string
     role: string
   }
+  // Add total earnings
+  totalEarnings?: number
 }
 
 interface Incident {
@@ -153,6 +153,7 @@ export default function DashboardMain() {
   const [totalWeight, setTotalWeight] = useState(0)
   const [uniqueLocations, setUniqueLocations] = useState(0)
   const [recyclingRate, setRecyclingRate] = useState(0)
+  const [totalEarnings, setTotalEarnings] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRecord, setSelectedRecord] = useState<GarbageRecord | null>(null)
@@ -206,6 +207,19 @@ export default function DashboardMain() {
     }
   }, [user, loading, router])
 
+  // Add a new useEffect to recalculate earnings when wasteTypesList changes:
+  useEffect(() => {
+    if (user && wasteTypesList.length > 0 && garbageData.length > 0) {
+      // Recalculate earnings when waste types are loaded
+      const updatedEarnings = garbageData.reduce((sum, record) => {
+        const wasteType = wasteTypesList.find((type) => type.name === record.jenisSampah)
+        const rupiah = wasteType ? Number(record.berat) * Number(wasteType.pricePerKg) : 0
+        return sum + rupiah
+      }, 0)
+      setTotalEarnings(updatedEarnings)
+    }
+  }, [wasteTypesList, garbageData, user])
+
   // Fetch waste types
   const fetchWasteTypes = async () => {
     if (!user) return
@@ -234,8 +248,8 @@ export default function DashboardMain() {
     if (!types.length) return
 
     const totalTypes = types.length
-    const totalPrice = types.reduce((sum, type) => sum + type.pricePerKg, 0)
-    const averagePrice = totalPrice / totalTypes
+    const totalPrice = types.reduce((sum, type) => sum + Number(type.pricePerKg || 0), 0)
+    const averagePrice = totalTypes > 0 ? totalPrice / totalTypes : 0
     const recyclableCount = types.filter((type) => type.recyclable).length
     const recyclablePercentage = (recyclableCount / totalTypes) * 100
     const hazardousCount = types.filter((type) => type.hazardous).length
@@ -564,28 +578,109 @@ export default function DashboardMain() {
 
       const [garbageResponse, leaderboardResponse, incidentResponse] = responses
 
-      setGarbageData(garbageResponse.data || [])
-      const total = garbageResponse.data.reduce(
+      // Process garbage data and calculate rupiah values
+      const garbageDataWithRupiah = garbageResponse.data.map((record: GarbageRecord) => {
+        // Find the waste type for this record
+        const wasteType = wasteTypesList.find((type) => type.name === record.jenisSampah)
+        // Calculate rupiah based on weight and price per kg
+        const rupiah = wasteType ? Number(record.berat) * Number(wasteType.pricePerKg) : 0
+        console.log(
+          `Record: ${record.id}, Weight: ${record.berat}, Type: ${record.jenisSampah}, Price: ${wasteType?.pricePerKg || 0}, Rupiah: ${rupiah}`,
+        )
+        return {
+          ...record,
+          rupiah,
+        }
+      })
+
+      setGarbageData(garbageDataWithRupiah)
+
+      // Calculate total weight
+      const total = garbageDataWithRupiah.reduce(
         (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
         0,
       )
       setTotalWeight(total)
 
-      const locations = new Set(garbageResponse.data.map((record: GarbageRecord) => `${record.rt}-${record.rw}`))
+      // Calculate total earnings with explicit conversion to numbers
+      const earnings = garbageDataWithRupiah.reduce((sum: number, record: GarbageRecord) => {
+        // If rupiah is already calculated in the record, use it
+        if (record.rupiah) {
+          return sum + Number(record.rupiah)
+        }
+        // Otherwise calculate it based on waste type
+        const wasteType = wasteTypesList.find((type) => type.name === record.jenisSampah)
+        const calculatedRupiah = wasteType ? Number(record.berat) * Number(wasteType.pricePerKg) : 0
+        return sum + calculatedRupiah
+      }, 0)
+      console.log(`Total earnings calculated: ${earnings}`)
+      setTotalEarnings(earnings)
+
+      const locations = new Set(garbageDataWithRupiah.map((record: GarbageRecord) => `${record.rt}-${record.rw}`))
       setUniqueLocations(locations.size)
 
-      const recyclableWaste = garbageResponse.data.filter((record: GarbageRecord) =>
-        ["Plastik", "Kertas", "Kaca"].includes(record.jenisSampah),
-      )
-      const recyclableWeight = recyclableWaste.reduce(
-        (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
-        0,
-      )
+      // First, ensure wasteTypesList is available
+      if (wasteTypesList.length > 0) {
+        // Identify recyclable waste based on waste type properties
+        const recyclableWaste = garbageDataWithRupiah.filter((record: GarbageRecord) => {
+          const wasteType = wasteTypesList.find((type) => type.name === record.jenisSampah)
+          return wasteType?.recyclable === true
+        })
 
-      const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0
-      setRecyclingRate(recyclingRate)
+        // Calculate total weight of recyclable waste
+        const recyclableWeight = recyclableWaste.reduce(
+          (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
+          0,
+        )
 
-      setLeaderboard(leaderboardResponse.data || [])
+        // Calculate recycling rate as percentage
+        const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0
+        console.log("Recycling calculation:", {
+          totalWeight: total,
+          recyclableWeight,
+          recyclingRate,
+          recyclableItems: recyclableWaste.length,
+          totalItems: garbageDataWithRupiah.length,
+        })
+        setRecyclingRate(recyclingRate)
+      } else {
+        // If waste types aren't loaded yet, use a fallback calculation based on common recyclable materials
+        const commonRecyclables = ["Plastik", "Kertas", "Kaca", "Logam", "Kardus", "Aluminium"]
+        const recyclableWaste = garbageDataWithRupiah.filter((record: GarbageRecord) =>
+          commonRecyclables.includes(record.jenisSampah),
+        )
+
+        const recyclableWeight = recyclableWaste.reduce(
+          (sum: number, record: GarbageRecord) => sum + (Number(record.berat) || 0),
+          0,
+        )
+
+        const recyclingRate = total > 0 ? (recyclableWeight / total) * 100 : 0
+        console.log("Fallback recycling calculation:", {
+          totalWeight: total,
+          recyclableWeight,
+          recyclingRate,
+        })
+        setRecyclingRate(recyclingRate)
+      }
+
+      // Process leaderboard data to include earnings
+      const leaderboardWithEarnings = leaderboardResponse.data.map((entry: LeaderboardEntry) => {
+        // Calculate total earnings for this user
+        const userRecords = garbageDataWithRupiah.filter((record: GarbageRecord) => {
+          const recordUser = users.find((u) => u.id === record.userId)
+          return recordUser?.id === entry.userId
+        })
+
+        const totalEarnings = userRecords.reduce((sum: number, record: GarbageRecord) => sum + (record.rupiah || 0), 0)
+
+        return {
+          ...entry,
+          totalEarnings,
+        }
+      })
+
+      setLeaderboard(leaderboardWithEarnings)
 
       if (user.role !== "WARGA" && incidentResponse) {
         setIncidents(incidentResponse.data || [])
@@ -601,7 +696,7 @@ export default function DashboardMain() {
     } finally {
       setIsLoading(false)
     }
-  }, [user, toast])
+  }, [user, toast, wasteTypesList, users])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -620,22 +715,17 @@ export default function DashboardMain() {
     }
   }
 
-  const calculatePoints = (weight: number, wasteType: string): number => {
+  // Calculate rupiah earned based on waste type and weight
+  const calculateRupiah = (weight: number, wasteType: string): number => {
     const selectedWasteType = wasteTypesList.find((type) => type.name === wasteType)
     if (selectedWasteType) {
-      // Base points on actual price
-      const basePoints = weight * selectedWasteType.pricePerKg
-      // Apply multiplier based on recyclability
-      const multiplier = selectedWasteType.recyclable ? 1.5 : 1
-      return Math.round(basePoints * multiplier)
+      return weight * selectedWasteType.pricePerKg
     }
-    // Fallback to original calculation if waste type not found
-    const basePoints = weight * 10
-    const multiplier = wasteType === "Organik" ? 1 : 1.5
-    return Math.round(basePoints * multiplier)
+    // Fallback if waste type not found
+    return 0
   }
 
-  // Modifikasi fungsi handleSubmit untuk mengirim userId
+  // Modified handleSubmit function to merge data when username matches and use rupiah instead of points
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
@@ -670,7 +760,7 @@ export default function DashboardMain() {
         return
       }
 
-      const points = calculatePoints(weight, newRecord.jenisSampah)
+      const rupiah = calculateRupiah(weight, newRecord.jenisSampah)
 
       // Find the selected user to get their username
       const selectedUser = users.find((u) => u.id === newRecord.userId)
@@ -678,10 +768,15 @@ export default function DashboardMain() {
         toast({
           title: "Error",
           description: "User tidak ditemukan.",
-          variant: "destructive",
         })
         return
       }
+
+      // Check if there's an existing record with the same username
+      const existingRecords = garbageData.filter((record) => {
+        const recordUser = users.find((u) => u.id === record.userId)
+        return recordUser?.username === selectedUser.username && record.jenisSampah === newRecord.jenisSampah
+      })
 
       // Format the request body according to the new structure
       const requestBody = {
@@ -690,43 +785,76 @@ export default function DashboardMain() {
         rt: newRecord.rt,
         rw: newRecord.rw,
         jenisSampah: newRecord.jenisSampah,
-        poin: points,
+        poin: 0, // We're not using points anymore, but API might still require it
+        rupiah: rupiah,
       }
 
-      // Post to pengumpulan-sampah with the new format
-      const garbageResponse = await axios.post(`${API_URL}/api/pengumpulan-sampah`, requestBody, {
-        headers: { "x-user-role": user.role },
-      })
+      // If there's an existing record, update it instead of creating a new one
+      if (existingRecords.length > 0) {
+        const existingRecord = existingRecords[0]
+        const updatedWeight = Number(existingRecord.berat) + weight
+        const updatedRupiah = calculateRupiah(updatedWeight, newRecord.jenisSampah)
 
-      if (garbageResponse.status === 201) {
-        // Update leaderboard data
-        const leaderboardResponse = await axios.post(
-          `${API_URL}/api/leaderboard`,
+        const updateResponse = await axios.put(
+          `${API_URL}/api/pengumpulan-sampah/${existingRecord.id}`,
           {
-            desaId: user.desaId,
-            userId: selectedUser.id,
-            totalPoin: points,
-            poinSaatIni: points,
-            jumlahPengumpulan: 1,
+            berat: updatedWeight,
+            jenisSampah: newRecord.jenisSampah,
+            poin: 0, // Not using points
+            rupiah: updatedRupiah,
           },
           {
             headers: { "x-user-role": user.role },
           },
         )
 
-        if (leaderboardResponse.status === 201) {
+        if (updateResponse.status === 200) {
           toast({
             title: "Sukses",
-            description: "Data berhasil ditambahkan dan leaderboard diperbarui.",
+            description: "Data berhasil diperbarui dan digabungkan dengan data yang sudah ada.",
           })
           setNewRecord({ berat: "", userId: "", rt: "", rw: "", jenisSampah: "" })
-          // Fetch updated data to refresh the table and leaderboard
           fetchData()
         } else {
-          throw new Error("Failed to update leaderboard")
+          throw new Error("Failed to update existing record")
         }
       } else {
-        throw new Error("Failed to add garbage collection data")
+        // Post to pengumpulan-sampah with the new format
+        const garbageResponse = await axios.post(`${API_URL}/api/pengumpulan-sampah`, requestBody, {
+          headers: { "x-user-role": user.role },
+        })
+
+        if (garbageResponse.status === 201) {
+          // Update leaderboard data
+          const leaderboardResponse = await axios.post(
+            `${API_URL}/api/leaderboard`,
+            {
+              desaId: user.desaId,
+              userId: selectedUser.id,
+              totalPoin: 0, // Not using points
+              poinSaatIni: 0, // Not using points
+              jumlahPengumpulan: 1,
+              totalEarnings: rupiah,
+            },
+            {
+              headers: { "x-user-role": user.role },
+            },
+          )
+
+          if (leaderboardResponse.status === 201) {
+            toast({
+              title: "Sukses",
+              description: "Data berhasil ditambahkan dan pendapatan warga diperbarui.",
+            })
+            setNewRecord({ berat: "", userId: "", rt: "", rw: "", jenisSampah: "" })
+            // Fetch updated data to refresh the table and leaderboard
+            fetchData()
+          } else {
+            throw new Error("Failed to update leaderboard")
+          }
+        } else {
+          throw new Error("Failed to add garbage collection data")
+        }
       }
     } catch (error) {
       console.error("Error submitting new record:", error)
@@ -798,11 +926,12 @@ export default function DashboardMain() {
     }
 
     try {
-      const points = calculatePoints(weight, type)
+      const rupiah = calculateRupiah(weight, type)
       const response = await axios.put(`${API_URL}/api/pengumpulan-sampah/${id}`, {
         berat: weight,
         jenisSampah: type,
-        poin: points,
+        poin: 0, // Not using points anymore
+        rupiah: rupiah,
       })
 
       if (response.status === 200) {
@@ -876,7 +1005,7 @@ export default function DashboardMain() {
     }
   }
 
-  // Ubah implementasi filteredData untuk memastikan konsistensi pencarian
+  // Improved filteredData implementation for consistent searching
   const filteredData = garbageData.filter((record) => {
     const recordUser = users.find((u) => u.id === record.userId)
     return (
@@ -920,6 +1049,31 @@ export default function DashboardMain() {
     }))
     .sort((a, b) => b["Total Sampah"] - a["Total Sampah"]) // Urutkan dari terbesar ke terkecil
 
+  // Prepare earnings data for charts
+  const earningsData = Array.from(
+    new Set(
+      garbageData.map((record) => {
+        const user = users.find((u) => u.id === record.userId)
+        return user?.username || "Unknown"
+      }),
+    ),
+  )
+    .map((username) => {
+      const userRecords = garbageData.filter((record) => {
+        const recordUser = users.find((u) => u.id === record.userId)
+        return recordUser?.username === username
+      })
+
+      const totalEarnings = userRecords.reduce((sum, record) => sum + (record.rupiah || 0), 0)
+
+      return {
+        name: username,
+        earnings: totalEarnings,
+      }
+    })
+    .sort((a, b) => b.earnings - a.earnings)
+    .slice(0, 10) // Top 10 earners
+
   if (loading || isLoadingUsers) {
     return <LoadingAnimation />
   }
@@ -943,7 +1097,7 @@ export default function DashboardMain() {
         </h2>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <DashboardCard
           icon={<FaTrash />}
           title="Total Sampah Terkumpul"
@@ -962,13 +1116,19 @@ export default function DashboardMain() {
           value={uniqueLocations.toString()}
           color="bg-gradient-to-r from-emerald-500 to-emerald-700 shadow-lg"
         />
+        <DashboardCard
+          icon={<DollarSign />}
+          title="Total Pendapatan"
+          value={`Rp${totalEarnings.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+          color="bg-gradient-to-r from-blue-500 to-blue-700 shadow-lg"
+        />
       </div>
 
       <Tabs defaultValue="collection" className="mb-8">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="collection">Pengumpulan Sampah</TabsTrigger>
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
-          <TabsTrigger value="gamification">Gamifikasi</TabsTrigger>
+          <TabsTrigger value="earnings">Pendapatan</TabsTrigger>
           <TabsTrigger value="waste-types">Jenis Sampah</TabsTrigger>
           {user?.role === "WARGA" ? (
             <TabsTrigger value="news">Berita</TabsTrigger>
@@ -988,7 +1148,7 @@ export default function DashboardMain() {
             />
             <StatCard
               title="Harga Rata-rata"
-              value={`Rp${wasteTypeStats.averagePrice.toFixed(2)}/kg`}
+              value={wasteTypeStats ? `Rp${wasteTypeStats.averagePrice.toLocaleString("id-ID")}/kg` : "Loading..."}
               icon={<ArrowUpDown className="h-8 w-8 text-amber-500" />}
               color="bg-amber-50 border-amber-200"
             />
@@ -1059,7 +1219,13 @@ export default function DashboardMain() {
                           <TableRow key={wasteType.id} className="hover:bg-green-50 transition-colors duration-200">
                             <TableCell className="font-medium">{wasteType.name}</TableCell>
                             <TableCell>{wasteType.description}</TableCell>
-                            <TableCell>Rp{Number(wasteType.pricePerKg).toFixed(2)}</TableCell>
+                            <TableCell>
+                              Rp
+                              {wasteType.pricePerKg.toLocaleString("id-ID", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0,
+                              })}
+                            </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-2">
                                 {wasteType.recyclable && (
@@ -1125,7 +1291,9 @@ export default function DashboardMain() {
                         index="name"
                         categories={["price"]}
                         colors={["#10B981"]}
-                        valueFormatter={(value) => `Rp${Number(value).toFixed(2)}`}
+                        valueFormatter={(value) =>
+                          `Rp${Number(value).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        }
                         yAxisWidth={48}
                       />
                     </div>
@@ -1278,16 +1446,25 @@ export default function DashboardMain() {
         </TabsContent>
 
         <TabsContent value="collection">
-          <Card>
-            <CardHeader>
-              <CardTitle>Daftar Pengumpulan Sampah</CardTitle>
+          <Card className="mb-6 bg-white shadow-lg rounded-lg overflow-hidden border border-gray-100">
+            <CardHeader className="bg-gradient-to-r from-green-600 to-green-800 text-white">
+              <CardTitle className="text-2xl">Daftar Pengumpulan Sampah</CardTitle>
+              <CardDescription className="text-green-100">
+                Kelola data pengumpulan sampah dan pendapatan warga
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               {user?.role === "ADMIN" && (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <form
+                  onSubmit={handleSubmit}
+                  className="space-y-6 bg-green-50 p-6 rounded-lg mb-8 border border-green-100"
+                >
+                  <h3 className="text-xl font-semibold text-green-800 mb-4 flex items-center">
+                    <Plus className="mr-2 h-5 w-5" /> Tambah Data Pengumpulan Baru
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div>
-                      <label htmlFor="berat" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="berat" className="block text-sm font-medium text-gray-700 mb-1">
                         Berat (kg)
                       </label>
                       <Input
@@ -1297,27 +1474,26 @@ export default function DashboardMain() {
                         value={newRecord.berat}
                         onChange={handleInputChange}
                         required
+                        className="shadow-sm"
                       />
                     </div>
-                    {/* Perbaiki implementasi user selection dropdown */}
-                    {/* Update bagian Select User dengan debugging */}
+                    {/* Improved user selection dropdown */}
                     <div>
-                      <label htmlFor="userId" className="block text-sm font-medium text-gray-700">
-                        Pilih User
+                      <label htmlFor="userId" className="block text-sm font-medium text-gray-700 mb-1">
+                        Pilih Warga
                       </label>
                       <div className="relative">
                         <Select
                           name="userId"
                           value={newRecord.userId}
                           onValueChange={(value) => {
-                            console.log("Selected user:", value) // Debug log
                             setNewRecord((prev) => ({
                               ...prev,
                               userId: value,
                             }))
                           }}
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger className="w-full shadow-sm">
                             <SelectValue placeholder="Cari username..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -1330,7 +1506,6 @@ export default function DashboardMain() {
                                   value={userSearchTerm}
                                   onChange={(e) => {
                                     const searchValue = e.target.value
-                                    console.log("Search term:", searchValue) // Debug log
                                     setUserSearchTerm(searchValue)
                                     setIsSearchingUser(true)
                                     setTimeout(() => setIsSearchingUser(false), 300)
@@ -1355,13 +1530,11 @@ export default function DashboardMain() {
                                       return u.role === "WARGA" && searchCheck && u.id
                                     })
 
-                                    console.log("Filtered users:", filteredUsers) // Debug log
-
                                     return filteredUsers.length > 0 ? (
                                       filteredUsers.map((u) => (
                                         <SelectItem
                                           key={u.id}
-                                          value={u.id || "default-id"} // Pastikan selalu ada value yang valid
+                                          value={u.id || "default-id"}
                                           className="cursor-pointer hover:bg-gray-100"
                                         >
                                           <div className="flex items-center gap-2">
@@ -1388,19 +1561,35 @@ export default function DashboardMain() {
                       </div>
                     </div>
                     <div>
-                      <label htmlFor="rt" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="rt" className="block text-sm font-medium text-gray-700 mb-1">
                         RT
                       </label>
-                      <Input type="text" id="rt" name="rt" value={newRecord.rt} onChange={handleInputChange} required />
+                      <Input
+                        type="text"
+                        id="rt"
+                        name="rt"
+                        value={newRecord.rt}
+                        onChange={handleInputChange}
+                        required
+                        className="shadow-sm"
+                      />
                     </div>
                     <div>
-                      <label htmlFor="rw" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="rw" className="block text-sm font-medium text-gray-700 mb-1">
                         RW
                       </label>
-                      <Input type="text" id="rw" name="rw" value={newRecord.rw} onChange={handleInputChange} required />
+                      <Input
+                        type="text"
+                        id="rw"
+                        name="rw"
+                        value={newRecord.rw}
+                        onChange={handleInputChange}
+                        required
+                        className="shadow-sm"
+                      />
                     </div>
                     <div>
-                      <label htmlFor="jenisSampah" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="jenisSampah" className="block text-sm font-medium text-gray-700 mb-1">
                         Jenis Sampah
                       </label>
                       <Select
@@ -1417,13 +1606,18 @@ export default function DashboardMain() {
                           }
                         }}
                       >
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className="w-full shadow-sm">
                           <SelectValue placeholder="Pilih Jenis Sampah" />
                         </SelectTrigger>
                         <SelectContent>
                           {wasteTypesList.map((type) => (
                             <SelectItem key={type.id} value={type.name}>
-                              {type.name} - Rp{type.pricePerKg}/kg
+                              {type.name} - Rp
+                              {type.pricePerKg.toLocaleString("id-ID", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0,
+                              })}
+                              /kg
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1431,71 +1625,134 @@ export default function DashboardMain() {
                     </div>
                   </div>
                   {calculatedPrice !== null && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
-                      <p className="text-sm font-medium text-green-800">
-                        Harga Estimasi: Rp{calculatedPrice.toFixed(2)}
+                    <div className="mt-2 p-4 bg-white border border-green-200 rounded-md shadow-sm">
+                      <p className="text-lg font-medium text-green-800 flex items-center">
+                        <DollarSign className="h-5 w-5 mr-2" />
+                        Pendapatan Estimasi: Rp
+                        {calculatedPrice.toLocaleString("id-ID", {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
                       </p>
-                      <p className="text-xs text-green-600">
+                      <p className="text-sm text-green-600 mt-1">
                         {newRecord.berat} kg × Rp
-                        {wasteTypesList.find((t) => t.name === newRecord.jenisSampah)?.pricePerKg.toFixed(2) || 0}/kg
+                        {Number(
+                          wasteTypesList.find((t) => t.name === newRecord.jenisSampah)?.pricePerKg || 0,
+                        ).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        /kg
                       </p>
                     </div>
                   )}
-                  <Button type="submit" className="w-full" onClick={handleSubmit}>
+                  <Button
+                    type="submit"
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    onClick={handleSubmit}
+                  >
                     Kirim Data Pengumpulan
                   </Button>
                 </form>
               )}
 
               <div className="mt-8">
-                <div className="flex items-center border border-gray-300 rounded-lg mb-4 p-2">
-                  <FaSearch className="text-gray-500 mr-2" />
+                <div className="flex items-center border border-gray-300 rounded-lg mb-6 p-3 bg-white shadow-sm">
+                  <Search className="text-gray-500 mr-2 h-5 w-5" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={handleSearchChange}
                     placeholder="Cari data berdasarkan username, alamat, atau jenis sampah..."
-                    className="w-full p-2 border-0 outline-none"
+                    className="w-full p-2 border-0 outline-none text-gray-700"
                   />
                 </div>
 
-                <div className="overflow-x-auto shadow-lg rounded-lg">
-                  <table className="min-w-full table-auto border-separate border-spacing-0">
-                    <thead className="bg-gradient-to-r from-green-400 to-green-600 text-white">
+                <div className="overflow-x-auto shadow-xl rounded-lg border border-gray-200">
+                  <table className="min-w-full table-auto border-collapse">
+                    <thead className="bg-gradient-to-r from-green-600 to-green-800 text-white">
                       <tr>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">Berat</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">Nama Pemilik</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">Alamat</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">Jenis Sampah</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">Poin</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">Waktu</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Berat</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Nama Warga</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Alamat</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Jenis Sampah</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Pendapatan</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Waktu</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white">
+                    <tbody className="bg-white divide-y divide-gray-200">
                       {currentRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="text-center py-4 text-gray-600">
-                            Tidak ada data
+                          <td colSpan={7} className="text-center py-8 text-gray-600">
+                            <div className="flex flex-col items-center">
+                              <Trash2 className="h-12 w-12 text-gray-400 mb-2" />
+                              <p>Tidak ada data pengumpulan sampah</p>
+                            </div>
                           </td>
                         </tr>
                       ) : (
                         currentRecords.map((record) => {
                           const recordUser = users.find((u) => u.id === record.userId)
+                          const wasteType = wasteTypesList.find((type) => type.name === record.jenisSampah)
+                          const rupiah = record.rupiah || (wasteType ? record.berat * wasteType.pricePerKg : 0)
+
                           return (
                             <tr
                               key={record.id}
                               onDoubleClick={() => handleRowDoubleClick(record)}
-                              className="cursor-pointer hover:bg-green-100 transition-colors duration-300"
+                              className="hover:bg-green-50 transition-colors duration-300"
                             >
-                              <td className="px-6 py-4 border-t border-b border-gray-300">{record.berat}</td>
-                              <td className="px-6 py-4 border-t border-b border-gray-300">
-                                {users.find((u) => u.id === record.userId)?.username || "User tidak ditemukan"}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="font-medium">{record.berat}</span> kg
                               </td>
-                              <td className="px-6 py-4 border-t border-b border-gray-300">{`RT ${record.rt} RW ${record.rw}`}</td>
-                              <td className="px-6 py-4 border-t border-b border-gray-300">{record.jenisSampah}</td>
-                              <td className="px-6 py-4 border-t border-b border-gray-300">{record.poin}</td>
-                              <td className="px-6 py-4 border-t border-b border-gray-300">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center text-green-800 font-bold mr-3">
+                                    {recordUser?.username?.charAt(0).toUpperCase() || "?"}
+                                  </div>
+                                  <span className="font-medium">{recordUser?.username || "User tidak ditemukan"}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">{`RT ${record.rt} RW ${record.rw}`}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <Badge
+                                  className={`${wasteType?.recyclable ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}
+                                >
+                                  {record.jenisSampah}
+                                </Badge>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap font-medium text-green-700">
+                                Rp
+                                {rupiah.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-gray-500">
                                 {new Date(record.waktu).toLocaleString("id-ID")}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex space-x-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleRowDoubleClick(record)
+                                    }}
+                                    className="border-gray-300 hover:bg-green-50 hover:border-green-300"
+                                  >
+                                    <Edit className="h-4 w-4 text-gray-600" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-gray-300 hover:bg-red-50 hover:border-red-300"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (confirm("Apakah Anda yakin ingin menghapus data ini?")) {
+                                        deleteData(record.id)
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           )
@@ -1505,24 +1762,50 @@ export default function DashboardMain() {
                   </table>
                 </div>
 
-                <div className="flex justify-center mt-4">
-                  <button
-                    onClick={() => goToPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="px-4 py-2 bg-green-500 text-white rounded-l"
-                  >
-                    Previous
-                  </button>
-                  <span className="px-4 py-2">
-                    {currentPage} / {totalPages}
-                  </span>
-                  <button
-                    onClick={() => goToPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="px-4 py-2 bg-green-500 text-white rounded-r"
-                  >
-                    Next
-                  </button>
+                <div className="flex justify-between items-center mt-6">
+                  <div className="text-sm text-gray-600">
+                    Menampilkan {currentRecords.length} dari {filteredData.length} data
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      variant="outline"
+                      size="sm"
+                      className="border-gray-300"
+                    >
+                      Previous
+                    </Button>
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const pageNumber =
+                          currentPage > 3
+                            ? currentPage - 3 + i + (totalPages - currentPage < 2 ? totalPages - currentPage - 2 : 0)
+                            : i + 1
+
+                        return pageNumber <= totalPages ? (
+                          <Button
+                            key={pageNumber}
+                            onClick={() => goToPage(pageNumber)}
+                            variant={currentPage === pageNumber ? "default" : "outline"}
+                            size="sm"
+                            className={`w-8 h-8 p-0 ${currentPage === pageNumber ? "bg-green-600 hover:bg-green-700" : "border-gray-300"}`}
+                          >
+                            {pageNumber}
+                          </Button>
+                        ) : null
+                      })}
+                    </div>
+                    <Button
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      variant="outline"
+                      size="sm"
+                      className="border-gray-300"
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -1532,18 +1815,18 @@ export default function DashboardMain() {
                   onClose={() => setIsModalOpen(false)}
                   currentData={selectedRecord}
                   updateData={updateData}
-                  deleteData={deleteData} // Tambahkan ini
+                  deleteData={deleteData}
                 />
               )}
             </CardContent>
           </Card>
 
           {user?.role === "ADMIN" && (
-            <Card className="mt-8">
-              <CardHeader>
+            <Card className="mt-8 shadow-lg border border-gray-100">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
                 <CardTitle>Input Jadwal Pengumpulan</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <CollectionScheduleForm user={user} />
               </CardContent>
             </Card>
@@ -1552,11 +1835,11 @@ export default function DashboardMain() {
 
         <TabsContent value="analytics">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
+            <Card className="shadow-lg border border-gray-100">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-green-800 text-white">
                 <CardTitle>Tren Pengumpulan Sampah</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <div className="h-[400px]">
                   <LineChart
                     data={chartData}
@@ -1570,11 +1853,11 @@ export default function DashboardMain() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="shadow-lg border border-gray-100">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-green-800 text-white">
                 <CardTitle>Komposisi Sampah</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <div className="h-[400px]">
                   <PieChart
                     data={wasteComposition}
@@ -1589,7 +1872,7 @@ export default function DashboardMain() {
                     <div key={index} className="flex items-center">
                       <div
                         className="w-4 h-4 rounded-full mr-2"
-                        style={{ backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"][index] }}
+                        style={{ backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"][index % 5] }}
                       ></div>
                       <span>
                         {item.name}: {typeof item.value === "number" ? item.value.toFixed(2) : "-"} kg
@@ -1600,11 +1883,11 @@ export default function DashboardMain() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="shadow-lg border border-gray-100">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-green-800 text-white">
                 <CardTitle>Performa Pengumpulan per Lokasi</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <div className="h-[400px]">
                   <BarChart
                     data={locationPerformance}
@@ -1618,11 +1901,11 @@ export default function DashboardMain() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="shadow-lg border border-gray-100">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-green-800 text-white">
                 <CardTitle>Wawasan AI</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <div>
                   <WawasanAI garbageData={garbageData} users={leaderboard} />
                 </div>
@@ -1631,22 +1914,139 @@ export default function DashboardMain() {
           </div>
         </TabsContent>
 
-        <TabsContent value="gamification">
-          <div className="grid grid-cols-1 gap-6">
-            <LeaderboardCard />
-            <AchievementsCard />
-            <UserStatisticsCard />
+        <TabsContent value="earnings">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="shadow-lg border border-gray-100">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
+                <CardTitle>Top 10 Pendapatan Warga</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="h-[400px]">
+                  <BarChart
+                    data={earningsData}
+                    index="name"
+                    categories={["earnings"]}
+                    colors={["#3B82F6"]}
+                    valueFormatter={(value) =>
+                      `Rp${Number(value).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                    }
+                    yAxisWidth={80}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border border-gray-100">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
+                <CardTitle>Ringkasan Pendapatan</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-100">
+                    <div className="flex items-center">
+                      <DollarSign className="h-10 w-10 text-blue-600 mr-4" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-800">Total Pendapatan</p>
+                        <p className="text-2xl font-bold text-blue-900">
+                          Rp
+                          {totalEarnings.toLocaleString("id-ID", {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-100">
+                    <div className="flex items-center">
+                      <Users className="h-10 w-10 text-green-600 mr-4" />
+                      <div>
+                        <p className="text-sm font-medium text-green-800">Jumlah Warga Aktif</p>
+                        <p className="text-2xl font-bold text-green-900">
+                          {new Set(garbageData.map((record) => record.userId)).size}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-100">
+                    <div className="flex items-center">
+                      <TrendingUp className="h-10 w-10 text-amber-600 mr-4" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-800">Rata-rata Pendapatan per Warga</p>
+                        <p className="text-2xl font-bold text-amber-900">
+                          Rp
+                          {(
+                            totalEarnings / (new Set(garbageData.map((record) => record.userId)).size || 1)
+                          ).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border border-gray-100 md:col-span-2">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
+                <CardTitle>Daftar Pendapatan Warga</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="overflow-x-auto shadow-lg rounded-lg border border-gray-200">
+                  <table className="min-w-full table-auto border-collapse">
+                    <thead className="bg-blue-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-blue-800">Nama Warga</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-blue-800">Total Pengumpulan</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-blue-800">Total Berat (kg)</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-blue-800">Total Pendapatan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {leaderboard.map((entry) => {
+                        // Calculate total weight for this user
+                        const userRecords = garbageData.filter((record) => record.userId === entry.userId)
+                        const totalWeight = userRecords.reduce((sum, record) => sum + Number(record.berat), 0)
+
+                        return (
+                          <tr key={entry.id} className="hover:bg-blue-50 transition-colors duration-300">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-800 font-bold mr-3">
+                                  {entry.user?.username?.charAt(0).toUpperCase() || "?"}
+                                </div>
+                                <span className="font-medium">{entry.user?.username}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">{entry.jumlahPengumpulan}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">{totalWeight.toFixed(2)} kg</td>
+                            <td className="px-6 py-4 whitespace-nowrap font-medium text-green-700">
+                              Rp
+                              {(entry.totalEarnings || 0).toLocaleString("id-ID", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0,
+                              })}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="incidents">
           {user?.role !== "WARGA" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
+              <Card className="shadow-lg border border-gray-100">
+                <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-800 text-white">
                   <CardTitle>Laporan Insiden</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1777,11 +2177,11 @@ export default function DashboardMain() {
 
               <IncidentForm onSubmit={fetchData} />
 
-              <Card className="md:col-span-2">
-                <CardHeader>
+              <Card className="md:col-span-2 shadow-lg border border-gray-100">
+                <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-800 text-white">
                   <CardTitle>Ringkasan Insiden</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   <SimplifiedMap incidents={incidents} />
                 </CardContent>
               </Card>
@@ -1815,7 +2215,7 @@ function DashboardCard({
 }) {
   return (
     <motion.div
-      className={`bggradient-to-r ${color} rounded-lg shadow-md p-6 text-white`}
+      className={`${color} rounded-lg shadow-md p-6 text-white`}
       whileHover={{ scale: 1.05 }}
       transition={{ type: "spring", stiffness: 300 }}
     >
@@ -1842,7 +2242,7 @@ function StatCard({
   color: string
 }) {
   return (
-    <Card className={`${color} border`}>
+    <Card className={`${color} border shadow-md`}>
       <CardContent className="flex items-center p-6">
         <div className="mr-4">{icon}</div>
         <div>
@@ -1891,15 +2291,18 @@ function CollectionSchedule() {
   }, [user])
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="shadow-lg border border-gray-100">
+      <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
         <CardTitle>Jadwal Pengumpulan</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-6">
         {schedules.length === 0 ? (
-          <div>No schedules available</div>
+          <div className="flex flex-col items-center justify-center p-8 text-gray-500">
+            <FaCalendarAlt className="w-12 h-12 mb-4 text-gray-300" />
+            <p>Belum ada jadwal pengumpulan tersedia</p>
+          </div>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {schedules.map((schedule) => (
               <ScheduleItem
                 key={schedule.id}
@@ -1921,10 +2324,10 @@ function ScheduleItem({ day, startTime, endTime }: { day: string; startTime: str
   }
 
   return (
-    <li className="flex items-center space-x-2 text-gray-700">
-      <FaCalendarAlt className="text-green-600" />
-      <span className="font-medium">{day}:</span>
-      <span>
+    <li className="flex items-center p-3 bg-blue-50 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors">
+      <FaCalendarAlt className="text-blue-600 mr-3" />
+      <span className="font-medium text-blue-800 mr-2">{day}:</span>
+      <span className="text-blue-700">
         {formatTime(startTime)} - {formatTime(endTime)}
       </span>
     </li>
@@ -1937,55 +2340,38 @@ function CollectionSummary({ garbageData }: { garbageData: GarbageRecord[] }) {
   const averageWeight = totalWeight / totalCollections || 0
   const percentageCollected = (totalCollections / (totalCollections + 100)) * 100 // Assuming 100 as a baseline for total possible collections
 
+  // Calculate total earnings
+  const totalEarnings = garbageData.reduce((sum, record) => sum + (record.rupiah || 0), 0)
+  const averageEarnings = totalEarnings / totalCollections || 0
+
   return (
-    <Card>
-      <CardHeader>
+    <Card className="shadow-lg border border-gray-100">
+      <CardHeader className="bg-gradient-to-r from-green-600 to-green-800 text-white">
         <CardTitle>Ringkasan Pengumpulan</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-6">
         <div className="space-y-4">
-          <div>
-            <p className="text-sm font-medium text-gray-500">Total Pengumpulan</p>
-            <p className="text-2xl font-bold">{totalCollections}</p>
+          <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+            <p className="text-sm font-medium text-green-700">Total Pengumpulan</p>
+            <p className="text-2xl font-bold text-green-800">{totalCollections}</p>
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Total Berat</p>
-            <p className="text-2xl font-bold">{(Number(totalWeight) || 0).toFixed(2)} kg</p>
+          <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+            <p className="text-sm font-medium text-green-700">Total Berat</p>
+            <p className="text-2xl font-bold text-green-800">{(Number(totalWeight) || 0).toFixed(2)} kg</p>
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Rata-rata Berat per Pengumpulan</p>
-            <p className="text-2xl font-bold">{averageWeight.toFixed(2)} kg</p>
+          <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+            <p className="text-sm font-medium text-green-700">Rata-rata Berat per Pengumpulan</p>
+            <p className="text-2xl font-bold text-green-800">{averageWeight.toFixed(2)} kg</p>
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Persentase Pengumpulan</p>
-            <p className="text-2xl font-bold">{percentageCollected.toFixed(2)}%</p>
+          <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+            <p className="text-sm font-medium text-green-700">Rata-rata Pendapatan per Pengumpulan</p>
+            <p className="text-2xl font-bold text-green-800">
+              Rp{averageEarnings.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </p>
           </div>
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function Achievement({
-  title,
-  description,
-  icon,
-  progress,
-}: {
-  title: string
-  description: string
-  icon: React.ReactNode
-  progress: number
-}) {
-  return (
-    <div className="bg-white p-4 rounded-lg shadow">
-      <div className="flex items-center space-x-2 mb-2">
-        <div className="text-2xl text-green-600">{icon}</div>
-        <h3 className="font-semibold">{title}</h3>
-      </div>
-      <p className="text-sm text-gray-600 mb-2">{description}</p>
-      <Progress value={progress} className="w-full" />
-    </div>
   )
 }
 
@@ -2054,7 +2440,7 @@ function CollectionScheduleForm({ user }: { user: { desaId: string; role: string
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label htmlFor="hari" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="hari" className="block text-sm font-medium text-gray-700 mb-1">
             Hari
           </label>
           <Select
@@ -2064,7 +2450,7 @@ function CollectionScheduleForm({ user }: { user: { desaId: string; role: string
               handleInputChange({ target: { name: "hari", value } } as React.ChangeEvent<HTMLSelectElement>)
             }
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full shadow-sm">
               <SelectValue placeholder="Pilih Hari" />
             </SelectTrigger>
             <SelectContent>
@@ -2077,7 +2463,7 @@ function CollectionScheduleForm({ user }: { user: { desaId: string; role: string
           </Select>
         </div>
         <div>
-          <label htmlFor="waktuMulai" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="waktuMulai" className="block text-sm font-medium text-gray-700 mb-1">
             Waktu Mulai
           </label>
           <Input
@@ -2087,10 +2473,11 @@ function CollectionScheduleForm({ user }: { user: { desaId: string; role: string
             value={newSchedule.waktuMulai}
             onChange={handleInputChange}
             required
+            className="shadow-sm"
           />
         </div>
         <div>
-          <label htmlFor="waktuSelesai" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="waktuSelesai" className="block text-sm font-medium text-gray-700 mb-1">
             Waktu Selesai
           </label>
           <Input
@@ -2100,10 +2487,11 @@ function CollectionScheduleForm({ user }: { user: { desaId: string; role: string
             value={newSchedule.waktuSelesai}
             onChange={handleInputChange}
             required
+            className="shadow-sm"
           />
         </div>
       </div>
-      <Button type="submit" className="w-full">
+      <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
         Tambah Jadwal Pengumpulan
       </Button>
     </form>
