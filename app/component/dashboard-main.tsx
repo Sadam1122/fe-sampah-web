@@ -1562,7 +1562,7 @@ export default function DashboardMain() {
                     </div>
                     <div>
                       <label htmlFor="rt" className="block text-sm font-medium text-gray-700 mb-1">
-                        RT
+                        TPS
                       </label>
                       <Input
                         type="text"
@@ -1576,7 +1576,7 @@ export default function DashboardMain() {
                     </div>
                     <div>
                       <label htmlFor="rw" className="block text-sm font-medium text-gray-700 mb-1">
-                        RW
+                        Lokasi
                       </label>
                       <Input
                         type="text"
@@ -1711,7 +1711,7 @@ export default function DashboardMain() {
                                   <span className="font-medium">{recordUser?.username || "User tidak ditemukan"}</span>
                                 </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">{`RT ${record.rt} RW ${record.rw}`}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">{`TPS ${record.rt} Lokasi: ${record.rw}`}</td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <Badge
                                   className={`${wasteType?.recyclable ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}
