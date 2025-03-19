@@ -220,6 +220,28 @@ export default function DashboardMain() {
     }
   }, [wasteTypesList, garbageData, user])
 
+  // Update leaderboard earnings when waste types or garbage data changes
+  useEffect(() => {
+    if (leaderboard.length > 0 && garbageData.length > 0 && wasteTypesList.length > 0) {
+      const updatedLeaderboard = leaderboard.map((entry) => {
+        const userRecords = garbageData.filter((record) => record.userId === entry.userId)
+
+        const totalEarnings = userRecords.reduce((sum, record) => {
+          const wasteType = wasteTypesList.find((type) => type.name === record.jenisSampah)
+          const rupiah = wasteType ? Number(record.berat) * Number(wasteType.pricePerKg) : 0
+          return sum + rupiah
+        }, 0)
+
+        return {
+          ...entry,
+          totalEarnings,
+        }
+      })
+
+      setLeaderboard(updatedLeaderboard)
+    }
+  }, [wasteTypesList, garbageData, leaderboard.length])
+
   // Fetch waste types
   const fetchWasteTypes = async () => {
     if (!user) return
@@ -667,16 +689,23 @@ export default function DashboardMain() {
       // Process leaderboard data to include earnings
       const leaderboardWithEarnings = leaderboardResponse.data.map((entry: LeaderboardEntry) => {
         // Calculate total earnings for this user
-        const userRecords = garbageDataWithRupiah.filter((record: GarbageRecord) => {
-          const recordUser = users.find((u) => u.id === record.userId)
-          return recordUser?.id === entry.userId
-        })
+        const userRecords = garbageDataWithRupiah.filter((record: GarbageRecord) => record.userId === entry.userId)
 
-        const totalEarnings = userRecords.reduce((sum: number, record: GarbageRecord) => sum + (record.rupiah || 0), 0)
+        // Calculate total earnings with explicit number conversion
+        const userTotalEarnings = userRecords.reduce((sum: number, record: GarbageRecord) => {
+          const recordRupiah =
+            record.rupiah !== undefined
+              ? Number(record.rupiah)
+              : (wasteTypesList.find((type) => type.name === record.jenisSampah)?.pricePerKg || 0) *
+                Number(record.berat)
+          return sum + recordRupiah
+        }, 0)
+
+        console.log(`User ${entry.user?.username} total earnings: ${userTotalEarnings}`)
 
         return {
           ...entry,
-          totalEarnings,
+          totalEarnings: userTotalEarnings,
         }
       })
 
@@ -2023,10 +2052,13 @@ export default function DashboardMain() {
                             <td className="px-6 py-4 whitespace-nowrap">{totalWeight.toFixed(2)} kg</td>
                             <td className="px-6 py-4 whitespace-nowrap font-medium text-green-700">
                               Rp
-                              {(entry.totalEarnings || 0).toLocaleString("id-ID", {
-                                minimumFractionDigits: 0,
-                                maximumFractionDigits: 0,
-                              })}
+                              {(entry.totalEarnings !== undefined ? Number(entry.totalEarnings) : 0).toLocaleString(
+                                "id-ID",
+                                {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 0,
+                                },
+                              )}
                             </td>
                           </tr>
                         )
